@@ -4,9 +4,9 @@ Modelo inicial de app para usuários internos enviarem arquivos para o OneDrive 
 
 Este repositório tem duas opções:
 
-- `static/`: protótipo sem instalação, bom para testar a ideia rapidamente.
+- Raiz do repositório: protótipo simples para GitHub Pages, sem instalação e sem build.
+- `static/`: cópia do protótipo simples.
 - `src/`: versão React/TypeScript para virar produto com build, testes e deploy depois.
-- `.github/workflows/pages.yml`: publicação automática da pasta `static` no GitHub Pages.
 
 ## O que este modelo faz
 
@@ -70,7 +70,7 @@ Abra:
 http://localhost:8080
 ```
 
-## Publicar pelo GitHub Pages
+## Publicar pelo GitHub Pages do jeito mais simples
 
 Depois de enviar os arquivos para o GitHub:
 
@@ -80,10 +80,22 @@ Depois de enviar os arquivos para o GitHub:
 4. Em **Build and deployment**, selecione:
 
    ```text
-   Source: GitHub Actions
+   Source: Deploy from a branch
    ```
 
-5. Vá em **Actions** e rode o workflow **Deploy GitHub Pages**, se ele ainda não tiver rodado sozinho.
+5. Em **Branch**, selecione:
+
+   ```text
+   main
+   ```
+
+6. Ao lado, selecione:
+
+   ```text
+   / (root)
+   ```
+
+7. Clique em **Save**.
 
 A URL esperada será parecida com:
 
