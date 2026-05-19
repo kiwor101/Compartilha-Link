@@ -265,17 +265,7 @@ async function uploadFilesAndCreateFolderLink(accessToken, files, sector) {
     method: "GET"
   });
 
-  const permission = await graphRequest(accessToken, `/me/drive/items/${folderItem.id}/createLink`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      type: "view",
-      scope: "anonymous",
-      retainInheritedPermissions: false
-    })
-  });
+  const permission = await createSharingLink(accessToken, folderItem.id, folderItemPath);
 
   if (!permission.link?.webUrl) {
     throw new Error("A Microsoft nao retornou um link compartilhavel para este arquivo.");
@@ -347,6 +337,35 @@ async function uploadLargeFile(accessToken, uploadPath, file) {
   }
 
   return uploadedItem;
+}
+
+async function createSharingLink(accessToken, itemId, folderItemPath) {
+  const body = JSON.stringify({
+    type: "view",
+    scope: "anonymous"
+  });
+
+  try {
+    return await graphRequest(accessToken, `/me/drive/items/${itemId}/createLink`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body
+    });
+  } catch (firstError) {
+    try {
+      return await graphRequest(accessToken, `/me/drive/root:/${folderItemPath}:/createLink`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body
+      });
+    } catch {
+      throw firstError;
+    }
+  }
 }
 
 async function ensureFolderPath(accessToken, folders) {
@@ -541,7 +560,7 @@ function mapSelectedFiles(fileList) {
 }
 
 function encodePathSegment(segment) {
-  return encodeURIComponent(segment).replace(/%20/g, " ");
+  return encodeURIComponent(segment);
 }
 
 function formatBytes(bytes) {
