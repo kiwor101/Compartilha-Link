@@ -6,19 +6,14 @@
     <title>Compartilha Link</title>
     <link rel="stylesheet" href="./styles.css" />
     <script src="./config.js"></script>
-    <script src="./app.js?v=2" defer></script>
+    <script src="./app.js?v=3" defer></script>
   </head>
   <body>
     <main class="shell">
       <section class="workspace">
         <header class="topbar">
           <div class="brandBlock">
-            <img class="brandLogo" src="./santa-casa-logo.png" alt="Irmandade Santa Casa de Andradina" />
-            <div>
-              <p class="eyebrow">Microsoft 365</p>
-              <h1>Compartilha Link</h1>
-              <p class="subtitle">Link Facil OneDrive</p>
-            </div>
+            <h1>Compartilha Link</h1>
           </div>
           <button id="logoutButton" class="ghostButton hidden" type="button">Sair</button>
         </header>
@@ -37,14 +32,13 @@
             </div>
 
             <label class="field">
-              <span>Setor ou categoria</span>
+              <span>Nome da pasta:</span>
               <input id="sectorInput" value="Geral" placeholder="Ex.: Prontuario, Prestacao de Contas" />
             </label>
 
             <label class="dropzone">
-              <span class="uploadIcon">UP</span>
               <strong>Selecionar arquivos</strong>
-              <span>PDFs, imagens e documentos ate 250 MB cada</span>
+              <span>PDFs, imagens e documentos</span>
               <input id="fileInput" type="file" multiple />
             </label>
 

@@ -1,6 +1,9 @@
 const graphBaseUrl = "https://graph.microsoft.com/v1.0";
 const authScopes = "openid profile offline_access User.Read Files.ReadWrite";
 const maxSimpleUploadSize = 250 * 1024 * 1024;
+const uploadChunkSize = 10 * 1024 * 1024;
+const historyFolderName = "_Compartilha Link Sistema";
+const historyFileName = "historico.json";
 
 const config = window.APP_CONFIG || {};
 const authBaseUrl = `https://login.microsoftonline.com/${config.microsoftTenantId}/oauth2/v2.0`;
@@ -14,6 +17,7 @@ const configIsReady =
 let selectedFiles = [];
 let account = null;
 let tokenCache = readTokenCache();
+let linkHistory = [];
 
 const elements = {
   loginPanel: document.querySelector("#loginPanel"),
@@ -106,6 +110,7 @@ function renderSignedIn() {
   elements.appPanel.classList.remove("hidden");
   elements.logoutButton.classList.remove("hidden");
   elements.accountName.textContent = account?.username || "-";
+  loadAndRenderHistory();
 }
 
 function renderSignedOut() {
@@ -141,13 +146,8 @@ async function uploadSelectedFiles() {
     return;
   }
 
-  if (selectedFiles.some((file) => file.size > maxSimpleUploadSize)) {
-    setStatus("Este modelo inicial aceita arquivos ate 250 MB. Arquivos maiores entram na proxima etapa.", "error");
-    return;
-  }
-
   elements.uploadButton.disabled = true;
-  elements.linkList.innerHTML = "";
+  renderLinks([]);
   elements.emptyState.classList.add("hidden");
   elements.linkCount.textContent = "0";
   setStatus("Enviando arquivos e criando links...", "");
@@ -155,13 +155,18 @@ async function uploadSelectedFiles() {
   try {
     const token = await getAccessToken();
     const results = [];
+    const folderName = normalizeFolderName(elements.sectorInput.value);
 
     for (const file of selectedFiles) {
-      const result = await uploadFileAndCreateLink(token, file, elements.sectorInput.value);
+      setStatus(`Enviando ${file.name}...`, "");
+      const result = await uploadFileAndCreateLink(token, file, folderName);
       results.push(result);
       renderLinks(results);
     }
 
+    linkHistory = [...results, ...linkHistory];
+    await saveHistory(token, linkHistory);
+    renderLinks(linkHistory);
     setStatus("Links criados com sucesso.", "done");
   } catch (error) {
     setStatus(error.message || "Nao foi possivel concluir o envio.", "error");
@@ -199,19 +204,17 @@ async function getAccessToken() {
 async function uploadFileAndCreateLink(accessToken, file, sector) {
   const rootFolder = config.uploadRootFolder || "Compartilhamentos Externos";
   const today = new Date().toISOString().slice(0, 10);
-  const folderPath = [rootFolder, normalizeFolderName(sector), today];
+  const folderName = normalizeFolderName(sector);
+  const folderPath = [rootFolder, folderName, today];
 
   await ensureFolderPath(accessToken, folderPath);
 
   const fileName = buildUniqueFileName(file.name);
   const uploadPath = [...folderPath, fileName].map(encodePathSegment).join("/");
-  const uploadedItem = await graphRequest(accessToken, `/me/drive/root:/${uploadPath}:/content`, {
-    method: "PUT",
-    headers: {
-      "Content-Type": file.type || "application/octet-stream"
-    },
-    body: file
-  });
+  const uploadedItem =
+    file.size <= maxSimpleUploadSize
+      ? await uploadSmallFile(accessToken, uploadPath, file)
+      : await uploadLargeFile(accessToken, uploadPath, file);
 
   const permission = await graphRequest(accessToken, `/me/drive/items/${uploadedItem.id}/createLink`, {
     method: "POST",
@@ -230,10 +233,70 @@ async function uploadFileAndCreateLink(accessToken, file, sector) {
   }
 
   return {
+    folderName,
     fileName,
     webUrl: permission.link.webUrl,
-    size: uploadedItem.size
+    size: uploadedItem.size,
+    createdAt: new Date().toISOString()
   };
+}
+
+async function uploadSmallFile(accessToken, uploadPath, file) {
+  return graphRequest(accessToken, `/me/drive/root:/${uploadPath}:/content`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": file.type || "application/octet-stream"
+    },
+    body: file
+  });
+}
+
+async function uploadLargeFile(accessToken, uploadPath, file) {
+  const session = await graphRequest(accessToken, `/me/drive/root:/${uploadPath}:/createUploadSession`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      item: {
+        "@microsoft.graph.conflictBehavior": "replace"
+      }
+    })
+  });
+
+  let start = 0;
+  let uploadedItem = null;
+
+  while (start < file.size) {
+    const end = Math.min(start + uploadChunkSize, file.size) - 1;
+    const chunk = file.slice(start, end + 1);
+    const response = await fetch(session.uploadUrl, {
+      method: "PUT",
+      headers: {
+        "Content-Length": String(chunk.size),
+        "Content-Range": `bytes ${start}-${end}/${file.size}`
+      },
+      body: chunk
+    });
+
+    if (!response.ok) {
+      throw await graphError(response);
+    }
+
+    const payload = await response.json();
+    if (response.status === 201 || response.status === 200) {
+      uploadedItem = payload;
+    }
+
+    start = end + 1;
+    setStatus(`Enviando arquivo grande... ${Math.round((start / file.size) * 100)}%`, "");
+  }
+
+  if (!uploadedItem?.id) {
+    throw new Error("A Microsoft nao confirmou a conclusao do upload grande.");
+  }
+
+  return uploadedItem;
 }
 
 async function ensureFolderPath(accessToken, folders) {
@@ -297,7 +360,8 @@ async function graphRequest(accessToken, endpoint, init) {
     throw await graphError(response);
   }
 
-  return response.json();
+  const history = await response.json();
+  return Array.isArray(history) ? history : [];
 }
 
 async function graphError(response) {
@@ -313,6 +377,13 @@ function renderLinks(links) {
   elements.linkCount.textContent = String(links.length);
   elements.linkList.innerHTML = "";
 
+  if (links.length === 0) {
+    elements.emptyState.classList.remove("hidden");
+    return;
+  }
+
+  elements.emptyState.classList.add("hidden");
+
   for (const link of links) {
     const item = document.createElement("article");
     item.className = "linkItem";
@@ -320,8 +391,8 @@ function renderLinks(links) {
     const info = document.createElement("div");
     const name = document.createElement("strong");
     const size = document.createElement("span");
-    name.textContent = link.fileName;
-    size.textContent = formatBytes(link.size);
+    name.textContent = link.folderName || "Pasta sem nome";
+    size.textContent = `${formatBytes(link.size)} - ${formatDate(link.createdAt)}`;
     info.append(name, size);
 
     const copyButton = document.createElement("button");
@@ -339,6 +410,55 @@ function renderLinks(links) {
     item.append(info, copyButton);
     elements.linkList.append(item);
   }
+}
+
+async function loadAndRenderHistory() {
+  try {
+    const token = await getAccessToken();
+    linkHistory = await loadHistory(token);
+    renderLinks(linkHistory);
+  } catch {
+    linkHistory = [];
+    renderLinks([]);
+  }
+}
+
+async function loadHistory(accessToken) {
+  const historyPath = getHistoryPath().map(encodePathSegment).join("/");
+  const response = await fetch(`${graphBaseUrl}/me/drive/root:/${historyPath}:/content`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`
+    }
+  });
+
+  if (response.status === 404) {
+    return [];
+  }
+
+  if (!response.ok) {
+    throw await graphError(response);
+  }
+
+  return response.json();
+}
+
+async function saveHistory(accessToken, history) {
+  const rootFolder = config.uploadRootFolder || "Compartilhamentos Externos";
+  await ensureFolderPath(accessToken, [rootFolder, historyFolderName]);
+
+  const historyPath = getHistoryPath().map(encodePathSegment).join("/");
+  await graphRequest(accessToken, `/me/drive/root:/${historyPath}:/content`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(history.slice(0, 200), null, 2)
+  });
+}
+
+function getHistoryPath() {
+  const rootFolder = config.uploadRootFolder || "Compartilhamentos Externos";
+  return [rootFolder, historyFolderName, historyFileName];
 }
 
 function setStatus(message, type) {
@@ -378,6 +498,20 @@ function formatBytes(bytes) {
   return `${value.toFixed(value >= 10 || index === 0 ? 0 : 1)} ${units[index]}`;
 }
 
+function formatDate(value) {
+  if (!value) {
+    return "";
+  }
+
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(new Date(value));
+}
+
 async function finishRedirectLoginIfNeeded() {
   const params = new URLSearchParams(window.location.search);
   const code = params.get("code");
@@ -385,7 +519,7 @@ async function finishRedirectLoginIfNeeded() {
   const error = params.get("error_description") || params.get("error");
 
   if (error) {
-    window.history.replaceState({}, document.title, window.location.origin);
+    window.history.replaceState({}, document.title, redirectUri);
     throw new Error(error);
   }
 
@@ -413,7 +547,7 @@ async function finishRedirectLoginIfNeeded() {
   saveTokenResponse(tokenResponse, accountInfo);
   sessionStorage.removeItem("pkce_state");
   sessionStorage.removeItem("pkce_verifier");
-  window.history.replaceState({}, document.title, window.location.origin);
+  window.history.replaceState({}, document.title, redirectUri);
 }
 
 async function requestToken(fields) {
@@ -476,6 +610,7 @@ function clearTokenCache() {
   elements.linkList.innerHTML = "";
   elements.linkCount.textContent = "0";
   elements.emptyState.classList.remove("hidden");
+  linkHistory = [];
 }
 
 async function sha256Base64Url(value) {
