@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Link Facil OneDrive</title>
+    <title>Compartilha Link</title>
     <link rel="stylesheet" href="./styles.css" />
     <script src="./config.js"></script>
     <script src="./app.js?v=2" defer></script>
@@ -12,20 +12,27 @@
     <main class="shell">
       <section class="workspace">
         <header class="topbar">
-          <div>
-            <p class="eyebrow">Microsoft 365</p>
-            <h1>Link Facil OneDrive</h1>
+          <div class="brandBlock">
+            <img class="brandLogo" src="./santa-casa-logo.png" alt="Irmandade Santa Casa de Andradina" />
+            <div>
+              <p class="eyebrow">Microsoft 365</p>
+              <h1>Compartilha Link</h1>
+              <p class="subtitle">Link Fácil OneDrive</p>
+            </div>
           </div>
           <button id="logoutButton" class="ghostButton hidden" type="button">Sair</button>
         </header>
 
         <section id="loginPanel" class="loginPanel">
           <div class="loginCopy">
-            <div class="symbol">MS</div>
-            <h2>Entre com sua conta corporativa</h2>
-            <p>Depois do login, escolha os arquivos e receba links externos prontos para copiar.</p>
+            <span class="loginTag">Uso interno</span>
+            <h2>Entrar para gerar links</h2>
+            <p>Faça login com sua conta corporativa, envie os arquivos e copie o link externo pronto para compartilhar.</p>
           </div>
-          <button id="loginButton" class="primaryButton" type="button">Entrar com Microsoft</button>
+          <button id="loginButton" class="primaryButton loginButton" type="button">
+            <span class="msMark">M</span>
+            Entrar com Microsoft
+          </button>
         </section>
 
         <section id="appPanel" class="grid hidden">
