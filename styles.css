@@ -214,6 +214,34 @@ h2 {
   cursor: pointer;
 }
 
+.folderPicker {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 40px;
+  margin: -4px 0 14px;
+  border: 1px solid #c9d8e5;
+  border-radius: 6px;
+  color: #18415f;
+  background: #f8fbfd;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.folderPicker:hover {
+  border-color: #8aa3b8;
+  background: #eef6fb;
+}
+
+.folderPicker input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
 .primaryButton,
 .ghostButton,
 .copyButton,

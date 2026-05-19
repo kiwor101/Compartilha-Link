@@ -6,7 +6,7 @@
     <title>Compartilha Link</title>
     <link rel="stylesheet" href="./styles.css" />
     <script src="./config.js"></script>
-    <script src="./app.js?v=4" defer></script>
+    <script src="./app.js?v=5" defer></script>
   </head>
   <body>
     <main class="shell">
@@ -40,6 +40,11 @@
               <strong>Selecionar arquivos</strong>
               <span>PDFs, imagens e documentos</span>
               <input id="fileInput" type="file" multiple />
+            </label>
+
+            <label class="folderPicker">
+              Selecionar pasta inteira
+              <input id="folderInput" type="file" webkitdirectory directory multiple />
             </label>
 
             <div id="fileSummary" class="fileSummary hidden">

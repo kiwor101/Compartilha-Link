@@ -27,6 +27,7 @@ const elements = {
   accountName: document.querySelector("#accountName"),
   sectorInput: document.querySelector("#sectorInput"),
   fileInput: document.querySelector("#fileInput"),
+  folderInput: document.querySelector("#folderInput"),
   fileSummary: document.querySelector("#fileSummary"),
   fileList: document.querySelector("#fileList"),
   fileCount: document.querySelector("#fileCount"),
@@ -42,8 +43,13 @@ const elements = {
 elements.loginButton.addEventListener("click", signIn);
 elements.logoutButton.addEventListener("click", signOut);
 elements.fileInput.addEventListener("change", () => {
-  selectedFiles = [...selectedFiles, ...Array.from(elements.fileInput.files || [])];
+  selectedFiles = [...selectedFiles, ...mapSelectedFiles(elements.fileInput.files)];
   elements.fileInput.value = "";
+  renderFileSummary();
+});
+elements.folderInput.addEventListener("change", () => {
+  selectedFiles = [...selectedFiles, ...mapSelectedFiles(elements.folderInput.files)];
+  elements.folderInput.value = "";
   renderFileSummary();
 });
 elements.clearButton.addEventListener("click", clearFiles);
@@ -144,7 +150,7 @@ function renderFileSummary() {
     const info = document.createElement("div");
     const name = document.createElement("strong");
     const size = document.createElement("span");
-    name.textContent = file.name;
+    name.textContent = file.relativePath || file.name;
     size.textContent = formatBytes(file.size);
     info.append(name, size);
 
@@ -227,30 +233,35 @@ async function getAccessToken() {
 
 async function uploadFilesAndCreateFolderLink(accessToken, files, sector) {
   const rootFolder = config.uploadRootFolder || "Compartilhamentos Externos";
-  const today = new Date().toISOString().slice(0, 10);
   const folderName = normalizeFolderName(sector);
-  const folderPath = [rootFolder, folderName, today];
+  const folderPath = [rootFolder, folderName];
 
   await ensureFolderPath(accessToken, folderPath);
 
   const uploadedFiles = [];
 
   for (const file of files) {
-    setStatus(`Enviando ${file.name}...`, "");
-    const fileName = buildUniqueFileName(file.name);
-    const uploadPath = [...folderPath, fileName].map(encodePathSegment).join("/");
+    const relativePath = normalizeRelativePath(file.relativePath || file.webkitRelativePath || file.name);
+    setStatus(`Enviando ${relativePath}...`, "");
+    const uploadParts = relativePath.split("/").filter(Boolean).map(sanitizePathSegment);
+
+    if (uploadParts.length > 1) {
+      await ensureFolderPath(accessToken, [...folderPath, ...uploadParts.slice(0, -1)]);
+    }
+
+    const uploadPath = [...folderPath, ...uploadParts].map(encodePathSegment).join("/");
     const uploadedItem =
       file.size <= maxSimpleUploadSize
         ? await uploadSmallFile(accessToken, uploadPath, file)
         : await uploadLargeFile(accessToken, uploadPath, file);
     uploadedFiles.push({
-      fileName,
+      fileName: uploadParts.join("/"),
       size: uploadedItem.size || file.size
     });
   }
 
   const folderItemPath = folderPath.map(encodePathSegment).join("/");
-  const folderItem = await graphRequest(accessToken, `/me/drive/root:/${folderItemPath}`, {
+  const folderItem = await graphRequest(accessToken, `/me/drive/root:/${folderItemPath}:`, {
     method: "GET"
   });
 
@@ -507,19 +518,26 @@ function setStatus(message, type) {
 }
 
 function normalizeFolderName(value) {
-  return value.trim() || "Geral";
+  return sanitizePathSegment(value.trim() || "Geral");
 }
 
-function buildUniqueFileName(fileName) {
-  const cleanName = fileName.replace(/[<>:"/\\|?*]+/g, "-").trim();
-  const dotIndex = cleanName.lastIndexOf(".");
-  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+function sanitizePathSegment(value) {
+  return value.replace(/[<>:"/\\|?*]+/g, "-").trim() || "arquivo";
+}
 
-  if (dotIndex <= 0) {
-    return `${cleanName || "arquivo"}-${stamp}`;
-  }
+function normalizeRelativePath(value) {
+  return value
+    .split("/")
+    .filter(Boolean)
+    .map(sanitizePathSegment)
+    .join("/");
+}
 
-  return `${cleanName.slice(0, dotIndex)}-${stamp}${cleanName.slice(dotIndex)}`;
+function mapSelectedFiles(fileList) {
+  return Array.from(fileList || []).map((file) => {
+    file.relativePath = file.webkitRelativePath || file.name;
+    return file;
+  });
 }
 
 function encodePathSegment(segment) {
