@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Link Facil OneDrive</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="./config.js"></script>
+    <script src="./app.js?v=2" defer></script>
+  </head>
+  <body>
+    <main class="shell">
+      <section class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Microsoft 365</p>
+            <h1>Link Facil OneDrive</h1>
+          </div>
+          <button id="logoutButton" class="ghostButton hidden" type="button">Sair</button>
+        </header>
+
+        <section id="loginPanel" class="loginPanel">
+          <div class="loginCopy">
+            <div class="symbol">MS</div>
+            <h2>Entre com sua conta corporativa</h2>
+            <p>Depois do login, escolha os arquivos e receba links externos prontos para copiar.</p>
+          </div>
+          <button id="loginButton" class="primaryButton" type="button">Entrar com Microsoft</button>
+        </section>
+
+        <section id="appPanel" class="grid hidden">
+          <div class="panel">
+            <div class="accountLine">
+              <span>Conectado como</span>
+              <strong id="accountName">-</strong>
+            </div>
+
+            <label class="field">
+              <span>Setor ou categoria</span>
+              <input id="sectorInput" value="Geral" placeholder="Ex.: Prontuario, Prestacao de Contas" />
+            </label>
+
+            <label class="dropzone">
+              <span class="uploadIcon">UP</span>
+              <strong>Selecionar arquivos</strong>
+              <span>PDFs, imagens e documentos ate 250 MB cada</span>
+              <input id="fileInput" type="file" multiple />
+            </label>
+
+            <div id="fileSummary" class="fileSummary hidden">
+              <div>
+                <strong id="fileCount">0 arquivo(s)</strong>
+                <span id="fileSize">0 B no total</span>
+              </div>
+              <button id="clearButton" class="iconButton" type="button" aria-label="Limpar arquivos">X</button>
+            </div>
+
+            <button id="uploadButton" class="primaryButton" type="button" disabled>
+              Enviar e gerar links
+            </button>
+
+            <p id="statusMessage" class="status"></p>
+          </div>
+
+          <div class="panel resultsPanel">
+            <div class="panelHeader">
+              <h2>Links gerados</h2>
+              <span id="linkCount">0</span>
+            </div>
+            <div id="emptyState" class="emptyState">
+              <span class="clipboardIcon">LK</span>
+              <p>Os links aparecem aqui assim que o envio terminar.</p>
+            </div>
+            <div id="linkList" class="linkList"></div>
+          </div>
+        </section>
+      </section>
+    </main>
+  </body>
+</html>
