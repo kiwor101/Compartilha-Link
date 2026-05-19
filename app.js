@@ -28,6 +28,7 @@ const elements = {
   sectorInput: document.querySelector("#sectorInput"),
   fileInput: document.querySelector("#fileInput"),
   fileSummary: document.querySelector("#fileSummary"),
+  fileList: document.querySelector("#fileList"),
   fileCount: document.querySelector("#fileCount"),
   fileSize: document.querySelector("#fileSize"),
   clearButton: document.querySelector("#clearButton"),
@@ -41,7 +42,8 @@ const elements = {
 elements.loginButton.addEventListener("click", signIn);
 elements.logoutButton.addEventListener("click", signOut);
 elements.fileInput.addEventListener("change", () => {
-  selectedFiles = Array.from(elements.fileInput.files || []);
+  selectedFiles = [...selectedFiles, ...Array.from(elements.fileInput.files || [])];
+  elements.fileInput.value = "";
   renderFileSummary();
 });
 elements.clearButton.addEventListener("click", clearFiles);
@@ -124,6 +126,7 @@ function renderSignedOut() {
 function renderFileSummary() {
   const totalSize = selectedFiles.reduce((total, file) => total + file.size, 0);
   elements.uploadButton.disabled = selectedFiles.length === 0;
+  elements.fileList.innerHTML = "";
 
   if (selectedFiles.length === 0) {
     elements.fileSummary.classList.add("hidden");
@@ -133,6 +136,30 @@ function renderFileSummary() {
   elements.fileSummary.classList.remove("hidden");
   elements.fileCount.textContent = `${selectedFiles.length} arquivo(s)`;
   elements.fileSize.textContent = `${formatBytes(totalSize)} no total`;
+
+  selectedFiles.forEach((file, index) => {
+    const item = document.createElement("div");
+    item.className = "fileItem";
+
+    const info = document.createElement("div");
+    const name = document.createElement("strong");
+    const size = document.createElement("span");
+    name.textContent = file.name;
+    size.textContent = formatBytes(file.size);
+    info.append(name, size);
+
+    const removeButton = document.createElement("button");
+    removeButton.className = "removeFileButton";
+    removeButton.type = "button";
+    removeButton.textContent = "Remover";
+    removeButton.addEventListener("click", () => {
+      selectedFiles.splice(index, 1);
+      renderFileSummary();
+    });
+
+    item.append(info, removeButton);
+    elements.fileList.append(item);
+  });
 }
 
 function clearFiles() {
@@ -157,12 +184,9 @@ async function uploadSelectedFiles() {
     const results = [];
     const folderName = normalizeFolderName(elements.sectorInput.value);
 
-    for (const file of selectedFiles) {
-      setStatus(`Enviando ${file.name}...`, "");
-      const result = await uploadFileAndCreateLink(token, file, folderName);
-      results.push(result);
-      renderLinks(results);
-    }
+    const result = await uploadFilesAndCreateFolderLink(token, selectedFiles, folderName);
+    results.push(result);
+    renderLinks(results);
 
     linkHistory = [...results, ...linkHistory];
     await saveHistory(token, linkHistory);
@@ -201,7 +225,7 @@ async function getAccessToken() {
   return refreshed.access_token;
 }
 
-async function uploadFileAndCreateLink(accessToken, file, sector) {
+async function uploadFilesAndCreateFolderLink(accessToken, files, sector) {
   const rootFolder = config.uploadRootFolder || "Compartilhamentos Externos";
   const today = new Date().toISOString().slice(0, 10);
   const folderName = normalizeFolderName(sector);
@@ -209,14 +233,28 @@ async function uploadFileAndCreateLink(accessToken, file, sector) {
 
   await ensureFolderPath(accessToken, folderPath);
 
-  const fileName = buildUniqueFileName(file.name);
-  const uploadPath = [...folderPath, fileName].map(encodePathSegment).join("/");
-  const uploadedItem =
-    file.size <= maxSimpleUploadSize
-      ? await uploadSmallFile(accessToken, uploadPath, file)
-      : await uploadLargeFile(accessToken, uploadPath, file);
+  const uploadedFiles = [];
 
-  const permission = await graphRequest(accessToken, `/me/drive/items/${uploadedItem.id}/createLink`, {
+  for (const file of files) {
+    setStatus(`Enviando ${file.name}...`, "");
+    const fileName = buildUniqueFileName(file.name);
+    const uploadPath = [...folderPath, fileName].map(encodePathSegment).join("/");
+    const uploadedItem =
+      file.size <= maxSimpleUploadSize
+        ? await uploadSmallFile(accessToken, uploadPath, file)
+        : await uploadLargeFile(accessToken, uploadPath, file);
+    uploadedFiles.push({
+      fileName,
+      size: uploadedItem.size || file.size
+    });
+  }
+
+  const folderItemPath = folderPath.map(encodePathSegment).join("/");
+  const folderItem = await graphRequest(accessToken, `/me/drive/root:/${folderItemPath}`, {
+    method: "GET"
+  });
+
+  const permission = await graphRequest(accessToken, `/me/drive/items/${folderItem.id}/createLink`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
@@ -234,9 +272,10 @@ async function uploadFileAndCreateLink(accessToken, file, sector) {
 
   return {
     folderName,
-    fileName,
     webUrl: permission.link.webUrl,
-    size: uploadedItem.size,
+    size: uploadedFiles.reduce((total, file) => total + file.size, 0),
+    fileCount: uploadedFiles.length,
+    files: uploadedFiles,
     createdAt: new Date().toISOString()
   };
 }
@@ -392,7 +431,8 @@ function renderLinks(links) {
     const name = document.createElement("strong");
     const size = document.createElement("span");
     name.textContent = link.folderName || "Pasta sem nome";
-    size.textContent = `${formatBytes(link.size)} - ${formatDate(link.createdAt)}`;
+    const count = link.fileCount || link.files?.length || 1;
+    size.textContent = `${count} arquivo(s) - ${formatBytes(link.size)} - ${formatDate(link.createdAt)}`;
     info.append(name, size);
 
     const copyButton = document.createElement("button");

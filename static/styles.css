@@ -282,6 +282,55 @@ h2 {
   background: #eef5f9;
 }
 
+.fileList {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.fileItem {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #dfe8ef;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #fff;
+}
+
+.fileItem div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.fileItem strong {
+  overflow-wrap: anywhere;
+  color: #10233f;
+  font-size: 0.92rem;
+}
+
+.fileItem span {
+  color: #62758a;
+  font-size: 0.82rem;
+}
+
+.removeFileButton {
+  min-height: 32px;
+  border: 0;
+  border-radius: 6px;
+  padding: 0 10px;
+  color: #41566c;
+  background: #eef4f8;
+  font-weight: 700;
+}
+
+.removeFileButton:hover {
+  color: #9f1f18;
+  background: #fdeceb;
+}
+
 .fileSummary div,
 .linkItem div {
   display: grid;
