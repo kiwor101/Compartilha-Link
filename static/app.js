@@ -5,6 +5,11 @@ const maxSimpleUploadSize = 250 * 1024 * 1024;
 const config = window.APP_CONFIG || {};
 const authBaseUrl = `https://login.microsoftonline.com/${config.microsoftTenantId}/oauth2/v2.0`;
 const redirectUri = buildRedirectUri();
+const configIsReady =
+  config.microsoftClientId &&
+  config.microsoftTenantId &&
+  !config.microsoftClientId.includes("cole-aqui") &&
+  !config.microsoftTenantId.includes("cole-aqui");
 
 let selectedFiles = [];
 let account = null;
@@ -41,6 +46,12 @@ elements.uploadButton.addEventListener("click", uploadSelectedFiles);
 initialize();
 
 async function initialize() {
+  if (!configIsReady) {
+    elements.loginButton.disabled = true;
+    setStatus("Configure o Client ID e o Tenant ID no arquivo config.js antes de entrar.", "error");
+    return;
+  }
+
   try {
     await finishRedirectLoginIfNeeded();
   } catch (error) {
@@ -54,6 +65,11 @@ async function initialize() {
 }
 
 async function signIn() {
+  if (!configIsReady) {
+    setStatus("Configure o Client ID e o Tenant ID no arquivo config.js antes de entrar.", "error");
+    return;
+  }
+
   const state = crypto.randomUUID();
   const verifier = base64UrlEncode(crypto.getRandomValues(new Uint8Array(32)));
   const challenge = await sha256Base64Url(verifier);
