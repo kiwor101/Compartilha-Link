@@ -118,6 +118,7 @@ function renderSignedIn() {
   elements.appPanel.classList.remove("hidden");
   elements.logoutButton.classList.remove("hidden");
   elements.accountName.textContent = account?.username || "-";
+  refreshSignedInUser();
   loadAndRenderHistory();
 }
 
@@ -256,6 +257,7 @@ async function uploadFilesAndCreateFolderLink(accessToken, files, sector) {
         : await uploadLargeFile(accessToken, uploadPath, file);
     uploadedFiles.push({
       fileName: uploadParts.join("/"),
+      id: uploadedItem.id,
       size: uploadedItem.size || file.size
     });
   }
@@ -265,20 +267,32 @@ async function uploadFilesAndCreateFolderLink(accessToken, files, sector) {
     method: "GET"
   });
 
-  const permission = await createSharingLink(accessToken, folderItem.id, folderItemPath);
-  const webUrl = await resolveSharingUrl(accessToken, folderItem.id, permission);
+  let webUrl = "";
+  let linkMode = "folder";
+  let fileLinks = [];
+
+  try {
+    const permission = await createSharingLink(accessToken, folderItem.id, folderItemPath);
+    webUrl = await resolveSharingUrl(accessToken, folderItem.id, permission);
+  } catch {
+    webUrl = "";
+  }
 
   if (!webUrl) {
-    throw new Error(
-      `A Microsoft criou/processou o compartilhamento, mas nao retornou o link para o app. Detalhe tecnico: ${JSON.stringify(
-        permission
-      ).slice(0, 1200)}`
-    );
+    linkMode = "files";
+    fileLinks = await createFileLinks(accessToken, uploadedFiles);
+    webUrl = fileLinks[0]?.webUrl || "";
+  }
+
+  if (!webUrl) {
+    throw new Error("Nao foi possivel gerar link da pasta nem dos arquivos enviados.");
   }
 
   return {
     folderName,
     webUrl,
+    linkMode,
+    fileLinks,
     size: uploadedFiles.reduce((total, file) => total + file.size, 0),
     fileCount: uploadedFiles.length,
     files: uploadedFiles,
@@ -371,6 +385,29 @@ async function createSharingLink(accessToken, itemId, folderItemPath) {
       throw firstError;
     }
   }
+}
+
+async function createFileLinks(accessToken, uploadedFiles) {
+  const links = [];
+
+  for (const file of uploadedFiles) {
+    if (!file.id) {
+      continue;
+    }
+
+    const permission = await createSharingLink(accessToken, file.id, "");
+    const webUrl = await resolveSharingUrl(accessToken, file.id, permission);
+
+    if (webUrl) {
+      links.push({
+        fileName: file.fileName,
+        webUrl,
+        size: file.size
+      });
+    }
+  }
+
+  return links;
 }
 
 async function resolveSharingUrl(accessToken, itemId, permission) {
@@ -508,17 +545,42 @@ function renderLinks(links) {
     const copyButton = document.createElement("button");
     copyButton.className = "copyButton";
     copyButton.type = "button";
-    copyButton.textContent = "Copiar";
+    copyButton.textContent = link.linkMode === "files" ? "Copiar links" : "Copiar";
     copyButton.addEventListener("click", async () => {
-      await navigator.clipboard.writeText(link.webUrl);
+      const clipboardText =
+        link.linkMode === "files"
+          ? (link.fileLinks || []).map((file) => `${file.fileName}: ${file.webUrl}`).join("\n")
+          : link.webUrl;
+      await navigator.clipboard.writeText(clipboardText);
       copyButton.textContent = "Copiado";
       window.setTimeout(() => {
-        copyButton.textContent = "Copiar";
+        copyButton.textContent = link.linkMode === "files" ? "Copiar links" : "Copiar";
       }, 1800);
     });
 
     item.append(info, copyButton);
     elements.linkList.append(item);
+  }
+}
+
+async function refreshSignedInUser() {
+  try {
+    const token = await getAccessToken();
+    const accountInfo = await getCurrentUser(token);
+    account = accountInfo;
+    elements.accountName.textContent = accountInfo.username;
+    if (tokenCache) {
+      saveTokenResponse(
+        {
+          access_token: tokenCache.accessToken,
+          refresh_token: tokenCache.refreshToken,
+          expires_in: Math.max(60, Math.floor((tokenCache.expiresAt - Date.now()) / 1000))
+        },
+        accountInfo
+      );
+    }
+  } catch {
+    elements.accountName.textContent = account?.username || "Usuario Microsoft";
   }
 }
 
