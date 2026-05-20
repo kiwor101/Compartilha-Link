@@ -218,6 +218,7 @@ async function uploadSelectedFiles() {
     linkHistory = [...results, ...linkHistory];
     await saveHistory(token, linkHistory);
     renderLinks(linkHistory);
+    clearFiles();
     setStatus("Links criados com sucesso.", "done");
   } catch (error) {
     setStatus(error.message || "Nao foi possivel concluir o envio.", "error");
