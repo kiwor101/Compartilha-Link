@@ -270,11 +270,13 @@ async function uploadFilesAndCreateFolderLink(accessToken, files, sector) {
   let webUrl = "";
   let linkMode = "folder";
   let fileLinks = [];
+  let folderLinkError = "";
 
   try {
     const permission = await createSharingLink(accessToken, folderItem.id, folderItemPath);
     webUrl = await resolveSharingUrl(accessToken, folderItem.id, permission);
-  } catch {
+  } catch (error) {
+    folderLinkError = error?.message || "Falha ao gerar link da pasta.";
     webUrl = "";
   }
 
@@ -285,7 +287,9 @@ async function uploadFilesAndCreateFolderLink(accessToken, files, sector) {
   }
 
   if (!webUrl) {
-    throw new Error("Nao foi possivel gerar link da pasta nem dos arquivos enviados.");
+    throw new Error(
+      `Nao foi possivel gerar link da pasta nem dos arquivos enviados. Detalhe tecnico: ${folderLinkError || "sem detalhe retornado"}`
+    );
   }
 
   return {
@@ -395,19 +399,39 @@ async function createFileLinks(accessToken, uploadedFiles) {
       continue;
     }
 
-    const permission = await createSharingLink(accessToken, file.id, "");
-    const webUrl = await resolveSharingUrl(accessToken, file.id, permission);
+    try {
+      const permission = await createFileSharingLink(accessToken, file.id);
+      const webUrl = extractSharingUrl(permission) || (await resolveSharingUrl(accessToken, file.id, permission));
 
-    if (webUrl) {
+      if (!webUrl) {
+        continue;
+      }
+
       links.push({
         fileName: file.fileName,
         webUrl,
         size: file.size
       });
+    } catch {
+      continue;
     }
   }
 
   return links;
+}
+
+async function createFileSharingLink(accessToken, itemId) {
+  return graphRequest(accessToken, `/me/drive/items/${itemId}/createLink`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      type: "view",
+      scope: "anonymous",
+      retainInheritedPermissions: false
+    })
+  });
 }
 
 async function resolveSharingUrl(accessToken, itemId, permission) {
@@ -757,14 +781,31 @@ async function getCurrentUser(accessToken) {
 }
 
 function saveTokenResponse(tokenResponse, accountInfo) {
+  const tokenAccount = accountInfo?.username ? accountInfo : getAccountFromIdToken(tokenResponse.id_token);
+
   tokenCache = {
     accessToken: tokenResponse.access_token,
     refreshToken: tokenResponse.refresh_token || tokenCache?.refreshToken || null,
     expiresAt: Date.now() + Number(tokenResponse.expires_in || 3600) * 1000,
-    account: accountInfo
+    account: tokenAccount
   };
 
   localStorage.setItem("linkfacil_token", JSON.stringify(tokenCache));
+}
+
+function getAccountFromIdToken(idToken) {
+  if (!idToken) {
+    return { username: "Usuario Microsoft" };
+  }
+
+  try {
+    const payload = JSON.parse(atob(idToken.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+    return {
+      username: payload.preferred_username || payload.upn || payload.email || payload.name || "Usuario Microsoft"
+    };
+  } catch {
+    return { username: "Usuario Microsoft" };
+  }
 }
 
 function readTokenCache() {
