@@ -269,7 +269,11 @@ async function uploadFilesAndCreateFolderLink(accessToken, files, sector) {
   const webUrl = await resolveSharingUrl(accessToken, folderItem.id, permission);
 
   if (!webUrl) {
-    throw new Error("A Microsoft nao retornou um link compartilhavel para este arquivo.");
+    throw new Error(
+      `A Microsoft criou/processou o compartilhamento, mas nao retornou o link para o app. Detalhe tecnico: ${JSON.stringify(
+        permission
+      ).slice(0, 1200)}`
+    );
   }
 
   return {
@@ -384,7 +388,24 @@ async function resolveSharingUrl(accessToken, itemId, permission) {
 }
 
 function extractSharingUrl(permission) {
-  return permission?.link?.webUrl || permission?.webUrl || "";
+  if (!permission) {
+    return "";
+  }
+
+  if (Array.isArray(permission.value)) {
+    const item = permission.value.find((entry) => extractSharingUrl(entry));
+    return extractSharingUrl(item);
+  }
+
+  return (
+    permission?.link?.webUrl ||
+    permission?.link?.weburl ||
+    permission?.webUrl ||
+    permission?.weburl ||
+    permission?.shareLink?.webUrl ||
+    permission?.shareLink?.weburl ||
+    ""
+  );
 }
 
 async function ensureFolderPath(accessToken, folders) {
