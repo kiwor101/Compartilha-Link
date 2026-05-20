@@ -4,6 +4,7 @@ const maxSimpleUploadSize = 250 * 1024 * 1024;
 const uploadChunkSize = 10 * 1024 * 1024;
 const historyFolderName = "_Compartilha Link Sistema";
 const historyFileName = "historico.json";
+const allowedEmailDomain = "@santacasaandradina.org";
 
 const config = window.APP_CONFIG || {};
 const authBaseUrl = `https://login.microsoftonline.com/${config.microsoftTenantId}/oauth2/v2.0`;
@@ -101,7 +102,8 @@ async function signIn() {
     scope: authScopes,
     state,
     code_challenge: challenge,
-    code_challenge_method: "S256"
+    code_challenge_method: "S256",
+    prompt: "select_account"
   });
 
   window.location.href = `${authBaseUrl}/authorize?${params.toString()}`;
@@ -109,12 +111,11 @@ async function signIn() {
 
 async function signOut() {
   clearTokenCache();
+  sessionStorage.removeItem("pkce_state");
+  sessionStorage.removeItem("pkce_verifier");
+  window.history.replaceState({}, document.title, redirectUri);
   renderSignedOut();
-
-  const params = new URLSearchParams({
-    post_logout_redirect_uri: redirectUri
-  });
-  window.location.href = `${authBaseUrl}/logout?${params.toString()}`;
+  setStatus("Sessao encerrada neste aplicativo. Clique em Login para escolher a conta novamente.", "");
 }
 
 function renderSignedIn() {
@@ -863,6 +864,9 @@ async function finishRedirectLoginIfNeeded() {
   const error = params.get("error_description") || params.get("error");
 
   if (error) {
+    clearTokenCache();
+    sessionStorage.removeItem("pkce_state");
+    sessionStorage.removeItem("pkce_verifier");
     window.history.replaceState({}, document.title, redirectUri);
     throw new Error(error);
   }
@@ -887,11 +891,17 @@ async function finishRedirectLoginIfNeeded() {
     code_verifier: verifier
   });
 
-  const accountInfo = await getCurrentUser(tokenResponse.access_token);
-  saveTokenResponse(tokenResponse, accountInfo);
-  sessionStorage.removeItem("pkce_state");
-  sessionStorage.removeItem("pkce_verifier");
-  window.history.replaceState({}, document.title, redirectUri);
+  try {
+    const accountInfo = await getCurrentUser(tokenResponse.access_token);
+    saveTokenResponse(tokenResponse, accountInfo);
+  } catch (error) {
+    clearTokenCache();
+    throw error;
+  } finally {
+    sessionStorage.removeItem("pkce_state");
+    sessionStorage.removeItem("pkce_verifier");
+    window.history.replaceState({}, document.title, redirectUri);
+  }
 }
 
 async function requestToken(fields) {
@@ -915,10 +925,20 @@ async function getCurrentUser(accessToken) {
   const profile = await graphRequest(accessToken, "/me", {
     method: "GET"
   });
+  const username = profile.userPrincipalName || profile.mail || profile.displayName || "Usuario Microsoft";
+  validateCorporateAccount(username);
 
   return {
-    username: profile.userPrincipalName || profile.mail || profile.displayName || "Usuario Microsoft"
+    username
   };
+}
+
+function validateCorporateAccount(username) {
+  const normalizedUsername = String(username || "").toLocaleLowerCase("pt-BR");
+
+  if (!normalizedUsername.endsWith(allowedEmailDomain)) {
+    throw new Error(`Use uma conta corporativa do dominio ${allowedEmailDomain}.`);
+  }
 }
 
 function saveTokenResponse(tokenResponse, accountInfo) {
