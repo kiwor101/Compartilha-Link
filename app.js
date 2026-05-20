@@ -26,6 +26,7 @@ const elements = {
   logoutButton: document.querySelector("#logoutButton"),
   accountName: document.querySelector("#accountName"),
   sectorInput: document.querySelector("#sectorInput"),
+  dropzone: document.querySelector(".dropzone"),
   fileInput: document.querySelector("#fileInput"),
   folderInput: document.querySelector("#folderInput"),
   fileSummary: document.querySelector("#fileSummary"),
@@ -54,6 +55,9 @@ elements.folderInput.addEventListener("change", () => {
 });
 elements.clearButton.addEventListener("click", clearFiles);
 elements.uploadButton.addEventListener("click", uploadSelectedFiles);
+elements.dropzone.addEventListener("dragover", handleDragOver);
+elements.dropzone.addEventListener("dragleave", handleDragLeave);
+elements.dropzone.addEventListener("drop", handleDrop);
 
 initialize();
 
@@ -172,6 +176,7 @@ function renderFileSummary() {
 function clearFiles() {
   selectedFiles = [];
   elements.fileInput.value = "";
+  elements.folderInput.value = "";
   renderFileSummary();
 }
 
@@ -191,6 +196,12 @@ async function uploadSelectedFiles() {
     const results = [];
     const folderName = normalizeFolderName(elements.sectorInput.value);
 
+    linkHistory = await loadHistory(token);
+    if (folderNameExistsInHistory(folderName, linkHistory)) {
+      renderLinks(linkHistory);
+      throw new Error("Ja existe um link gerado com esse nome de pasta. Altere o nome da pasta para continuar.");
+    }
+
     const result = await uploadFilesAndCreateFolderLink(token, selectedFiles, folderName);
     results.push(result);
     renderLinks(results);
@@ -203,6 +214,38 @@ async function uploadSelectedFiles() {
     setStatus(error.message || "Nao foi possivel concluir o envio.", "error");
   } finally {
     elements.uploadButton.disabled = selectedFiles.length === 0;
+  }
+}
+
+function handleDragOver(event) {
+  event.preventDefault();
+  elements.dropzone.classList.add("isDragging");
+}
+
+function handleDragLeave(event) {
+  if (!elements.dropzone.contains(event.relatedTarget)) {
+    elements.dropzone.classList.remove("isDragging");
+  }
+}
+
+async function handleDrop(event) {
+  event.preventDefault();
+  elements.dropzone.classList.remove("isDragging");
+  setStatus("Lendo arquivos selecionados...", "");
+
+  try {
+    const droppedFiles = await readDroppedFiles(event.dataTransfer);
+
+    if (droppedFiles.length === 0) {
+      setStatus("Nenhum arquivo foi encontrado na selecao.", "error");
+      return;
+    }
+
+    selectedFiles = [...selectedFiles, ...droppedFiles];
+    renderFileSummary();
+    setStatus("", "");
+  } catch (error) {
+    setStatus(error.message || "Nao foi possivel ler os arquivos arrastados.", "error");
   }
 }
 
@@ -695,10 +738,91 @@ function normalizeRelativePath(value) {
     .join("/");
 }
 
+function folderNameExistsInHistory(folderName, history) {
+  const target = normalizeHistoryName(folderName);
+  return (history || []).some((item) => normalizeHistoryName(item.folderName) === target);
+}
+
+function normalizeHistoryName(value) {
+  return normalizeFolderName(String(value || "")).toLocaleLowerCase("pt-BR");
+}
+
 function mapSelectedFiles(fileList) {
   return Array.from(fileList || []).map((file) => {
     file.relativePath = file.webkitRelativePath || file.name;
     return file;
+  });
+}
+
+async function readDroppedFiles(dataTransfer) {
+  const items = Array.from(dataTransfer?.items || []);
+  const supportsDirectoryDrop = items.some((item) => typeof item.webkitGetAsEntry === "function");
+
+  if (!supportsDirectoryDrop) {
+    return mapSelectedFiles(dataTransfer?.files || []);
+  }
+
+  const files = [];
+
+  for (const item of items) {
+    const entry = item.webkitGetAsEntry();
+
+    if (!entry) {
+      const file = item.getAsFile();
+      if (file) {
+        file.relativePath = file.name;
+        files.push(file);
+      }
+      continue;
+    }
+
+    files.push(...(await readEntryFiles(entry, "")));
+  }
+
+  return files;
+}
+
+async function readEntryFiles(entry, parentPath) {
+  if (entry.isFile) {
+    const file = await getFileFromEntry(entry);
+    file.relativePath = `${parentPath}${file.name}`;
+    return [file];
+  }
+
+  if (!entry.isDirectory) {
+    return [];
+  }
+
+  const directoryPath = `${parentPath}${entry.name}/`;
+  const reader = entry.createReader();
+  const entries = await readAllDirectoryEntries(reader);
+  const files = await Promise.all(entries.map((child) => readEntryFiles(child, directoryPath)));
+  return files.flat();
+}
+
+function getFileFromEntry(entry) {
+  return new Promise((resolve, reject) => {
+    entry.file(resolve, reject);
+  });
+}
+
+function readAllDirectoryEntries(reader) {
+  return new Promise((resolve, reject) => {
+    const entries = [];
+
+    function readBatch() {
+      reader.readEntries((batch) => {
+        if (batch.length === 0) {
+          resolve(entries);
+          return;
+        }
+
+        entries.push(...batch);
+        readBatch();
+      }, reject);
+    }
+
+    readBatch();
   });
 }
 
@@ -844,6 +968,7 @@ function clearTokenCache() {
   account = null;
   selectedFiles = [];
   elements.fileInput.value = "";
+  elements.folderInput.value = "";
   elements.linkList.innerHTML = "";
   elements.linkCount.textContent = "0";
   elements.emptyState.classList.remove("hidden");
