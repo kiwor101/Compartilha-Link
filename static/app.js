@@ -22,6 +22,7 @@ let linkHistory = [];
 
 const elements = {
   loginPanel: document.querySelector("#loginPanel"),
+  loginStatus: document.querySelector("#loginStatus"),
   appPanel: document.querySelector("#appPanel"),
   loginButton: document.querySelector("#loginButton"),
   logoutButton: document.querySelector("#logoutButton"),
@@ -76,6 +77,13 @@ async function initialize() {
   }
 
   if (tokenCache?.account) {
+    if (!isCorporateAccount(tokenCache.account.username)) {
+      clearTokenCache();
+      renderSignedOut();
+      setStatus(`Use uma conta corporativa do dominio ${allowedEmailDomain}.`, "error");
+      return;
+    }
+
     account = tokenCache.account;
     renderSignedIn();
   }
@@ -721,6 +729,8 @@ function getHistoryPath() {
 function setStatus(message, type) {
   elements.statusMessage.textContent = message;
   elements.statusMessage.className = `status ${type}`;
+  elements.loginStatus.textContent = message;
+  elements.loginStatus.className = `status ${type}`;
 }
 
 function normalizeFolderName(value) {
@@ -934,11 +944,13 @@ async function getCurrentUser(accessToken) {
 }
 
 function validateCorporateAccount(username) {
-  const normalizedUsername = String(username || "").toLocaleLowerCase("pt-BR");
-
-  if (!normalizedUsername.endsWith(allowedEmailDomain)) {
+  if (!isCorporateAccount(username)) {
     throw new Error(`Use uma conta corporativa do dominio ${allowedEmailDomain}.`);
   }
+}
+
+function isCorporateAccount(username) {
+  return String(username || "").toLocaleLowerCase("pt-BR").endsWith(allowedEmailDomain);
 }
 
 function saveTokenResponse(tokenResponse, accountInfo) {
