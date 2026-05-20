@@ -20,6 +20,7 @@ let selectedFiles = [];
 let account = null;
 let tokenCache = readTokenCache();
 let linkHistory = [];
+let uploadProgressState = null;
 
 const elements = {
   loginPanel: document.querySelector("#loginPanel"),
@@ -32,16 +33,19 @@ const elements = {
   validitySelect: document.querySelector("#validitySelect"),
   dropzone: document.querySelector(".dropzone"),
   fileInput: document.querySelector("#fileInput"),
-  folderInput: document.querySelector("#folderInput"),
   fileSummary: document.querySelector("#fileSummary"),
   fileList: document.querySelector("#fileList"),
   fileCount: document.querySelector("#fileCount"),
   fileSize: document.querySelector("#fileSize"),
   clearButton: document.querySelector("#clearButton"),
+  uploadProgress: document.querySelector("#uploadProgress"),
+  progressPercent: document.querySelector("#progressPercent"),
+  progressBar: document.querySelector("#progressBar"),
   uploadButton: document.querySelector("#uploadButton"),
   statusMessage: document.querySelector("#statusMessage"),
   linkCount: document.querySelector("#linkCount"),
   emptyState: document.querySelector("#emptyState"),
+  historySearch: document.querySelector("#historySearch"),
   linkList: document.querySelector("#linkList")
 };
 
@@ -52,13 +56,9 @@ elements.fileInput.addEventListener("change", () => {
   elements.fileInput.value = "";
   renderFileSummary();
 });
-elements.folderInput.addEventListener("change", () => {
-  selectedFiles = [...selectedFiles, ...mapSelectedFiles(elements.folderInput.files)];
-  elements.folderInput.value = "";
-  renderFileSummary();
-});
 elements.clearButton.addEventListener("click", clearFiles);
 elements.uploadButton.addEventListener("click", uploadSelectedFiles);
+elements.historySearch.addEventListener("input", () => renderLinks(linkHistory));
 elements.dropzone.addEventListener("dragover", handleDragOver);
 elements.dropzone.addEventListener("dragleave", handleDragLeave);
 elements.dropzone.addEventListener("drop", handleDrop);
@@ -187,8 +187,8 @@ function renderFileSummary() {
 function clearFiles() {
   selectedFiles = [];
   elements.fileInput.value = "";
-  elements.folderInput.value = "";
   renderFileSummary();
+  hideUploadProgress();
 }
 
 async function uploadSelectedFiles() {
@@ -197,10 +197,8 @@ async function uploadSelectedFiles() {
   }
 
   elements.uploadButton.disabled = true;
-  renderLinks([]);
-  elements.emptyState.classList.add("hidden");
-  elements.linkCount.textContent = "0";
-  setStatus("Enviando arquivos e criando links...", "");
+  initializeUploadProgress(selectedFiles);
+  setStatus("Preparando envio...", "");
 
   try {
     const token = await getAccessToken();
@@ -220,7 +218,6 @@ async function uploadSelectedFiles() {
       expiresAt
     });
     results.push(result);
-    renderLinks(results);
 
     linkHistory = [...results, ...linkHistory];
     await saveHistory(token, linkHistory);
@@ -228,6 +225,7 @@ async function uploadSelectedFiles() {
     clearFiles();
     setStatus("Links criados com sucesso.", "done");
   } catch (error) {
+    hideUploadProgress();
     setStatus(error.message || "Nao foi possivel concluir o envio.", "error");
   } finally {
     elements.uploadButton.disabled = selectedFiles.length === 0;
@@ -313,11 +311,17 @@ async function uploadFilesAndCreateFolderLink(accessToken, files, sector, linkOp
     }
 
     const uploadPath = [...folderPath, ...uploadParts].map(encodePathSegment).join("/");
+    setStatus("Enviando arquivos...", "");
     const uploadedItem =
       file.size <= maxSimpleUploadSize
         ? await uploadSmallFile(accessToken, uploadPath, file)
-        : await uploadLargeFile(accessToken, uploadPath, file);
+        : await uploadLargeFile(accessToken, uploadPath, file, addUploadedBytes);
 
+    if (file.size <= maxSimpleUploadSize) {
+      addUploadedBytes(file.size);
+    }
+
+    setStatus("Criando link compartilhavel...", "");
     const filePermission = await createFileSharingLink(accessToken, uploadedItem.id, expiresAt);
     const fileWebUrl = extractSharingUrl(filePermission);
 
@@ -339,6 +343,7 @@ async function uploadFilesAndCreateFolderLink(accessToken, files, sector, linkOp
   }
 
   const folderItemPath = folderPath.map(encodePathSegment).join("/");
+  setStatus("Finalizando pasta e historico...", "");
   const folderItem = await graphRequest(accessToken, `/me/drive/root:/${folderItemPath}:`, {
     method: "GET"
   });
@@ -405,7 +410,7 @@ async function uploadSmallFile(accessToken, uploadPath, file) {
   });
 }
 
-async function uploadLargeFile(accessToken, uploadPath, file) {
+async function uploadLargeFile(accessToken, uploadPath, file, onProgress) {
   const session = await graphRequest(accessToken, `/me/drive/root:/${uploadPath}:/createUploadSession`, {
     method: "POST",
     headers: {
@@ -443,7 +448,7 @@ async function uploadLargeFile(accessToken, uploadPath, file) {
     }
 
     start = end + 1;
-    setStatus(`Enviando arquivo grande... ${Math.round((start / file.size) * 100)}%`, "");
+    onProgress?.(chunk.size);
   }
 
   if (!uploadedItem?.id) {
@@ -638,17 +643,22 @@ async function graphError(response) {
 }
 
 function renderLinks(links) {
-  elements.linkCount.textContent = String(links.length);
+  const filteredLinks = filterLinks(links);
+  elements.linkCount.textContent = String(filteredLinks.length);
   elements.linkList.innerHTML = "";
 
-  if (links.length === 0) {
+  if (filteredLinks.length === 0) {
     elements.emptyState.classList.remove("hidden");
+    const hasSearch = elements.historySearch.value.trim().length > 0;
+    elements.emptyState.querySelector("p").textContent = hasSearch
+      ? "Nenhum link encontrado para essa pesquisa."
+      : "Os links aparecem aqui assim que o envio terminar.";
     return;
   }
 
   elements.emptyState.classList.add("hidden");
 
-  for (const link of links) {
+  for (const link of filteredLinks) {
     const item = document.createElement("article");
     item.className = "linkItem";
 
@@ -924,6 +934,48 @@ function setStatus(message, type) {
   elements.loginStatus.className = `status ${type}`;
 }
 
+function initializeUploadProgress(files) {
+  const totalBytes = files.reduce((total, file) => total + file.size, 0);
+  uploadProgressState = {
+    totalBytes: Math.max(totalBytes, 1),
+    uploadedBytes: 0
+  };
+  elements.uploadProgress.classList.remove("hidden");
+  updateUploadProgress();
+}
+
+function addUploadedBytes(bytes) {
+  if (!uploadProgressState) {
+    return;
+  }
+
+  uploadProgressState.uploadedBytes = Math.min(
+    uploadProgressState.totalBytes,
+    uploadProgressState.uploadedBytes + Math.max(bytes, 0)
+  );
+  updateUploadProgress();
+}
+
+function updateUploadProgress() {
+  if (!uploadProgressState) {
+    return;
+  }
+
+  const percent = Math.min(
+    100,
+    Math.round((uploadProgressState.uploadedBytes / uploadProgressState.totalBytes) * 100)
+  );
+  elements.progressPercent.textContent = `${percent}%`;
+  elements.progressBar.style.width = `${percent}%`;
+}
+
+function hideUploadProgress() {
+  uploadProgressState = null;
+  elements.uploadProgress.classList.add("hidden");
+  elements.progressPercent.textContent = "0%";
+  elements.progressBar.style.width = "0%";
+}
+
 function normalizeFolderName(value) {
   return sanitizePathSegment(value.trim() || "Geral");
 }
@@ -943,6 +995,37 @@ function normalizeRelativePath(value) {
 function folderNameExistsInHistory(folderName, history) {
   const target = normalizeHistoryName(folderName);
   return (history || []).some((item) => normalizeHistoryName(item.folderName) === target);
+}
+
+function filterLinks(links) {
+  const search = normalizeSearchText(elements.historySearch.value);
+
+  if (!search) {
+    return links || [];
+  }
+
+  return (links || []).filter((link) => {
+    const searchableText = [
+      link.folderName,
+      formatDate(link.createdAt),
+      formatDate(link.expiresAt),
+      link.createdAt,
+      link.expiresAt
+    ]
+      .filter(Boolean)
+      .map(normalizeSearchText)
+      .join(" ");
+
+    return searchableText.includes(search);
+  });
+}
+
+function normalizeSearchText(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("pt-BR")
+    .trim();
 }
 
 function normalizeHistoryName(value) {
@@ -1205,7 +1288,6 @@ function clearTokenCache() {
   account = null;
   selectedFiles = [];
   elements.fileInput.value = "";
-  elements.folderInput.value = "";
   elements.linkList.innerHTML = "";
   elements.linkCount.textContent = "0";
   elements.emptyState.classList.remove("hidden");
