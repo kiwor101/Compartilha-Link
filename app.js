@@ -659,7 +659,10 @@ function renderLinks(links) {
     const count = link.fileCount || link.files?.length || 1;
     size.textContent = `${count} arquivo(s) - ${formatBytes(link.size)} - criado em ${formatDate(link.createdAt)}`;
     const expires = document.createElement("span");
-    expires.textContent = link.expiresAt ? `Link ativo ate ${formatDate(link.expiresAt)}` : "Link sem validade registrada";
+    const expired = isLinkExpired(link);
+    expires.textContent = link.expiresAt
+      ? `${expired ? "Link vencido em" : "Link ativo ate"} ${formatDate(link.expiresAt)}`
+      : "Link sem validade registrada";
     info.append(name, size, expires);
 
     const actions = document.createElement("div");
@@ -680,24 +683,27 @@ function renderLinks(links) {
       }, 1800);
     });
 
-    const renewSelect = document.createElement("select");
-    renewSelect.className = "renewSelect";
-    renewSelect.setAttribute("aria-label", "Prazo de renovacao");
-    for (const days of [7, 30, 60, 90]) {
-      const option = document.createElement("option");
-      option.value = String(days);
-      option.textContent = `${days} dias`;
-      option.selected = Number(link.validityDays || defaultValidityDays) === days;
-      renewSelect.append(option);
+    if (expired) {
+      const renewSelect = document.createElement("select");
+      renewSelect.className = "renewSelect";
+      renewSelect.setAttribute("aria-label", "Prazo de renovacao");
+      for (const days of [7, 30, 60, 90]) {
+        const option = document.createElement("option");
+        option.value = String(days);
+        option.textContent = `${days} dias`;
+        option.selected = Number(link.validityDays || defaultValidityDays) === days;
+        renewSelect.append(option);
+      }
+
+      const renewButton = document.createElement("button");
+      renewButton.className = "renewButton";
+      renewButton.type = "button";
+      renewButton.textContent = "Renovar";
+      renewButton.addEventListener("click", () => renewLink(link, Number(renewSelect.value), renewButton));
+      actions.append(renewSelect, renewButton);
     }
 
-    const renewButton = document.createElement("button");
-    renewButton.className = "renewButton";
-    renewButton.type = "button";
-    renewButton.textContent = "Renovar";
-    renewButton.addEventListener("click", () => renewLink(link, Number(renewSelect.value), renewButton));
-
-    actions.append(copyButton, renewSelect, renewButton);
+    actions.prepend(copyButton);
     item.append(info, actions);
     elements.linkList.append(item);
   }
@@ -835,6 +841,10 @@ async function findPermissionIdByUrl(accessToken, itemId, webUrl) {
 
 function isSameHistoryItem(item, target) {
   return item.createdAt === target.createdAt && item.folderName === target.folderName;
+}
+
+function isLinkExpired(link) {
+  return Boolean(link.expiresAt) && new Date(link.expiresAt).getTime() <= Date.now();
 }
 
 async function refreshSignedInUser() {
