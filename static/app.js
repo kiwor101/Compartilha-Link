@@ -266,14 +266,15 @@ async function uploadFilesAndCreateFolderLink(accessToken, files, sector) {
   });
 
   const permission = await createSharingLink(accessToken, folderItem.id, folderItemPath);
+  const webUrl = await resolveSharingUrl(accessToken, folderItem.id, permission);
 
-  if (!permission.link?.webUrl) {
+  if (!webUrl) {
     throw new Error("A Microsoft nao retornou um link compartilhavel para este arquivo.");
   }
 
   return {
     folderName,
-    webUrl: permission.link.webUrl,
+    webUrl,
     size: uploadedFiles.reduce((total, file) => total + file.size, 0),
     fileCount: uploadedFiles.length,
     files: uploadedFiles,
@@ -366,6 +367,24 @@ async function createSharingLink(accessToken, itemId, folderItemPath) {
       throw firstError;
     }
   }
+}
+
+async function resolveSharingUrl(accessToken, itemId, permission) {
+  const directUrl = extractSharingUrl(permission);
+  if (directUrl) {
+    return directUrl;
+  }
+
+  const permissions = await graphRequest(accessToken, `/me/drive/items/${itemId}/permissions`, {
+    method: "GET"
+  });
+
+  const sharedPermission = (permissions.value || []).find((item) => extractSharingUrl(item));
+  return extractSharingUrl(sharedPermission);
+}
+
+function extractSharingUrl(permission) {
+  return permission?.link?.webUrl || permission?.webUrl || "";
 }
 
 async function ensureFolderPath(accessToken, folders) {
