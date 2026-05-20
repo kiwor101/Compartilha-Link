@@ -4,9 +4,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Compartilha Link</title>
-    <link rel="stylesheet" href="./styles.css?v=2" />
+    <link rel="stylesheet" href="./styles.css?v=3" />
     <script src="./config.js"></script>
-    <script src="./app.js?v=16" defer></script>
+    <script src="./app.js?v=17" defer></script>
   </head>
   <body>
     <main class="shell">
@@ -35,6 +35,16 @@
             <label class="field">
               <span>Nome da pasta:</span>
               <input id="sectorInput" value="Geral" placeholder="Ex.: Prontuario, Prestacao de Contas" />
+            </label>
+
+            <label class="field">
+              <span>Validade do link:</span>
+              <select id="validitySelect">
+                <option value="7">7 dias</option>
+                <option value="30">30 dias</option>
+                <option value="60">60 dias</option>
+                <option value="90" selected>90 dias</option>
+              </select>
             </label>
 
             <label class="dropzone">

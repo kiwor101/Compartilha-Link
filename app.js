@@ -5,6 +5,7 @@ const uploadChunkSize = 10 * 1024 * 1024;
 const historyFolderName = "_Compartilha Link Sistema";
 const historyFileName = "historico.json";
 const allowedEmailDomain = "@santacasaandradina.org";
+const defaultValidityDays = 90;
 
 const config = window.APP_CONFIG || {};
 const authBaseUrl = `https://login.microsoftonline.com/${config.microsoftTenantId}/oauth2/v2.0`;
@@ -28,6 +29,7 @@ const elements = {
   logoutButton: document.querySelector("#logoutButton"),
   accountName: document.querySelector("#accountName"),
   sectorInput: document.querySelector("#sectorInput"),
+  validitySelect: document.querySelector("#validitySelect"),
   dropzone: document.querySelector(".dropzone"),
   fileInput: document.querySelector("#fileInput"),
   folderInput: document.querySelector("#folderInput"),
@@ -204,6 +206,8 @@ async function uploadSelectedFiles() {
     const token = await getAccessToken();
     const results = [];
     const folderName = normalizeFolderName(elements.sectorInput.value);
+    const validityDays = getSelectedValidityDays();
+    const expiresAt = buildExpirationDate(validityDays);
 
     linkHistory = await loadHistory(token);
     if (folderNameExistsInHistory(folderName, linkHistory)) {
@@ -211,7 +215,10 @@ async function uploadSelectedFiles() {
       throw new Error("Ja existe um link gerado com esse nome de pasta. Altere o nome da pasta para continuar.");
     }
 
-    const result = await uploadFilesAndCreateFolderLink(token, selectedFiles, folderName);
+    const result = await uploadFilesAndCreateFolderLink(token, selectedFiles, folderName, {
+      validityDays,
+      expiresAt
+    });
     results.push(result);
     renderLinks(results);
 
@@ -285,10 +292,12 @@ async function getAccessToken() {
   return refreshed.access_token;
 }
 
-async function uploadFilesAndCreateFolderLink(accessToken, files, sector) {
+async function uploadFilesAndCreateFolderLink(accessToken, files, sector, linkOptions = {}) {
   const rootFolder = config.uploadRootFolder || "Compartilhamentos Externos";
   const folderName = normalizeFolderName(sector);
   const folderPath = [rootFolder, folderName];
+  const validityDays = linkOptions.validityDays || defaultValidityDays;
+  const expiresAt = linkOptions.expiresAt || buildExpirationDate(validityDays);
 
   await ensureFolderPath(accessToken, folderPath);
 
@@ -309,7 +318,7 @@ async function uploadFilesAndCreateFolderLink(accessToken, files, sector) {
         ? await uploadSmallFile(accessToken, uploadPath, file)
         : await uploadLargeFile(accessToken, uploadPath, file);
 
-    const filePermission = await createFileSharingLink(accessToken, uploadedItem.id);
+    const filePermission = await createFileSharingLink(accessToken, uploadedItem.id, expiresAt);
     const fileWebUrl = extractSharingUrl(filePermission);
 
     if (!fileWebUrl) {
@@ -323,6 +332,7 @@ async function uploadFilesAndCreateFolderLink(accessToken, files, sector) {
     uploadedFiles.push({
       fileName: uploadParts.join("/"),
       id: uploadedItem.id,
+      permissionId: filePermission.id || "",
       size: uploadedItem.size || file.size,
       webUrl: fileWebUrl
     });
@@ -337,16 +347,21 @@ async function uploadFilesAndCreateFolderLink(accessToken, files, sector) {
   let linkMode = "files";
   let fileLinks = uploadedFiles.map((file) => ({
     fileName: file.fileName,
+    id: file.id,
+    permissionId: file.permissionId,
     webUrl: file.webUrl,
     size: file.size
   }));
   let folderLinkError = "";
+  let folderPermissionId = "";
 
   try {
-    const permission = await createSharingLink(accessToken, folderItem.id, folderItemPath);
+    const permission = await createSharingLink(accessToken, folderItem.id, folderItemPath, expiresAt);
     webUrl = await resolveSharingUrl(accessToken, folderItem.id, permission);
     if (webUrl) {
       linkMode = "folder";
+      fileLinks = [];
+      folderPermissionId = permission.id || "";
     }
   } catch (error) {
     folderLinkError = error?.message || "Falha ao gerar link da pasta.";
@@ -367,6 +382,11 @@ async function uploadFilesAndCreateFolderLink(accessToken, files, sector) {
     folderName,
     webUrl,
     linkMode,
+    validityDays,
+    expiresAt,
+    folderItemId: folderItem.id,
+    folderItemPath,
+    folderPermissionId,
     fileLinks,
     size: uploadedFiles.reduce((total, file) => total + file.size, 0),
     fileCount: uploadedFiles.length,
@@ -433,10 +453,11 @@ async function uploadLargeFile(accessToken, uploadPath, file) {
   return uploadedItem;
 }
 
-async function createSharingLink(accessToken, itemId, folderItemPath) {
+async function createSharingLink(accessToken, itemId, folderItemPath, expiresAt) {
   const body = JSON.stringify({
     type: "view",
-    scope: "anonymous"
+    scope: "anonymous",
+    expirationDateTime: expiresAt
   });
 
   try {
@@ -462,7 +483,7 @@ async function createSharingLink(accessToken, itemId, folderItemPath) {
   }
 }
 
-async function createFileLinks(accessToken, uploadedFiles) {
+async function createFileLinks(accessToken, uploadedFiles, expiresAt) {
   const links = [];
 
   for (const file of uploadedFiles) {
@@ -471,7 +492,7 @@ async function createFileLinks(accessToken, uploadedFiles) {
     }
 
     try {
-      const permission = await createFileSharingLink(accessToken, file.id);
+      const permission = await createFileSharingLink(accessToken, file.id, expiresAt);
       const webUrl = extractSharingUrl(permission) || (await resolveSharingUrl(accessToken, file.id, permission));
 
       if (!webUrl) {
@@ -480,6 +501,8 @@ async function createFileLinks(accessToken, uploadedFiles) {
 
       links.push({
         fileName: file.fileName,
+        id: file.id,
+        permissionId: permission.id || "",
         webUrl,
         size: file.size
       });
@@ -491,7 +514,7 @@ async function createFileLinks(accessToken, uploadedFiles) {
   return links;
 }
 
-async function createFileSharingLink(accessToken, itemId) {
+async function createFileSharingLink(accessToken, itemId, expiresAt) {
   return graphRequest(accessToken, `/me/drive/items/${itemId}/createLink`, {
     method: "POST",
     headers: {
@@ -500,6 +523,7 @@ async function createFileSharingLink(accessToken, itemId) {
     body: JSON.stringify({
       type: "view",
       scope: "anonymous",
+      expirationDateTime: expiresAt,
       retainInheritedPermissions: false
     })
   });
@@ -633,9 +657,13 @@ function renderLinks(links) {
     const size = document.createElement("span");
     name.textContent = link.folderName || "Pasta sem nome";
     const count = link.fileCount || link.files?.length || 1;
-    size.textContent = `${count} arquivo(s) - ${formatBytes(link.size)} - ${formatDate(link.createdAt)}`;
-    info.append(name, size);
+    size.textContent = `${count} arquivo(s) - ${formatBytes(link.size)} - criado em ${formatDate(link.createdAt)}`;
+    const expires = document.createElement("span");
+    expires.textContent = link.expiresAt ? `Link ativo ate ${formatDate(link.expiresAt)}` : "Link sem validade registrada";
+    info.append(name, size, expires);
 
+    const actions = document.createElement("div");
+    actions.className = "linkActions";
     const copyButton = document.createElement("button");
     copyButton.className = "copyButton";
     copyButton.type = "button";
@@ -652,9 +680,161 @@ function renderLinks(links) {
       }, 1800);
     });
 
-    item.append(info, copyButton);
+    const renewSelect = document.createElement("select");
+    renewSelect.className = "renewSelect";
+    renewSelect.setAttribute("aria-label", "Prazo de renovacao");
+    for (const days of [7, 30, 60, 90]) {
+      const option = document.createElement("option");
+      option.value = String(days);
+      option.textContent = `${days} dias`;
+      option.selected = Number(link.validityDays || defaultValidityDays) === days;
+      renewSelect.append(option);
+    }
+
+    const renewButton = document.createElement("button");
+    renewButton.className = "renewButton";
+    renewButton.type = "button";
+    renewButton.textContent = "Renovar";
+    renewButton.addEventListener("click", () => renewLink(link, Number(renewSelect.value), renewButton));
+
+    actions.append(copyButton, renewSelect, renewButton);
+    item.append(info, actions);
     elements.linkList.append(item);
   }
+}
+
+async function renewLink(link, validityDays, button) {
+  button.disabled = true;
+  button.textContent = "Renovando...";
+  setStatus("Renovando link...", "");
+
+  try {
+    const token = await getAccessToken();
+    const renewedLink = await renewHistoryLink(token, link, validityDays);
+    linkHistory = linkHistory.map((item) => (isSameHistoryItem(item, link) ? renewedLink : item));
+    await saveHistory(token, linkHistory);
+    renderLinks(linkHistory);
+    setStatus("Link renovado com sucesso.", "done");
+  } catch (error) {
+    setStatus(error.message || "Nao foi possivel renovar o link.", "error");
+    button.disabled = false;
+    button.textContent = "Renovar";
+  }
+}
+
+async function renewHistoryLink(accessToken, link, validityDays) {
+  const expiresAt = buildExpirationDate(validityDays);
+  const folderItemPath =
+    link.folderItemPath ||
+    [config.uploadRootFolder || "Compartilhamentos Externos", normalizeFolderName(link.folderName)]
+      .map(encodePathSegment)
+      .join("/");
+  const folderItem = link.folderItemId
+    ? { id: link.folderItemId }
+    : await getDriveItemByPath(accessToken, folderItemPath);
+
+  if (link.linkMode !== "files") {
+    const folderPermissionId = link.folderPermissionId || (await findPermissionIdByUrl(accessToken, folderItem.id, link.webUrl));
+
+    if (folderPermissionId) {
+      await deletePermission(accessToken, folderItem.id, folderPermissionId);
+    }
+
+    const permission = await createSharingLink(accessToken, folderItem.id, folderItemPath, expiresAt);
+    const webUrl = await resolveSharingUrl(accessToken, folderItem.id, permission);
+
+    if (!webUrl) {
+      throw new Error("A Microsoft nao retornou o novo link da pasta.");
+    }
+
+    return {
+      ...link,
+      webUrl,
+      linkMode: "folder",
+      validityDays,
+      expiresAt,
+      folderItemId: folderItem.id,
+      folderItemPath,
+      folderPermissionId: permission.id || "",
+      renewedAt: new Date().toISOString()
+    };
+  }
+
+  const renewedFiles = [];
+
+  for (const file of link.fileLinks || link.files || []) {
+    const relativeFilePath = normalizeRelativePath(file.fileName).split("/").map(encodePathSegment).join("/");
+    const fileItem = file.id ? { id: file.id } : await getDriveItemByPath(accessToken, `${folderItemPath}/${relativeFilePath}`);
+
+    const filePermissionId = file.permissionId || (await findPermissionIdByUrl(accessToken, fileItem.id, file.webUrl));
+
+    if (filePermissionId) {
+      await deletePermission(accessToken, fileItem.id, filePermissionId);
+    }
+
+    const permission = await createFileSharingLink(accessToken, fileItem.id, expiresAt);
+    const webUrl = extractSharingUrl(permission) || (await resolveSharingUrl(accessToken, fileItem.id, permission));
+
+    if (!webUrl) {
+      throw new Error(`A Microsoft nao retornou o novo link do arquivo ${file.fileName}.`);
+    }
+
+    renewedFiles.push({
+      ...file,
+      id: fileItem.id,
+      permissionId: permission.id || "",
+      webUrl
+    });
+  }
+
+  return {
+    ...link,
+    webUrl: renewedFiles[0]?.webUrl || "",
+    linkMode: "files",
+    validityDays,
+    expiresAt,
+    fileLinks: renewedFiles,
+    renewedAt: new Date().toISOString()
+  };
+}
+
+async function getDriveItemByPath(accessToken, itemPath) {
+  return graphRequest(accessToken, `/me/drive/root:/${itemPath}:`, {
+    method: "GET"
+  });
+}
+
+async function deletePermission(accessToken, itemId, permissionId) {
+  const response = await fetch(`${graphBaseUrl}/me/drive/items/${itemId}/permissions/${permissionId}`, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${accessToken}`
+    }
+  });
+
+  if (response.status === 404) {
+    return;
+  }
+
+  if (!response.ok) {
+    throw await graphError(response);
+  }
+}
+
+async function findPermissionIdByUrl(accessToken, itemId, webUrl) {
+  if (!webUrl) {
+    return "";
+  }
+
+  const permissions = await graphRequest(accessToken, `/me/drive/items/${itemId}/permissions`, {
+    method: "GET"
+  });
+  const matchingPermission = (permissions.value || []).find((permission) => extractSharingUrl(permission) === webUrl);
+  return matchingPermission?.id || "";
+}
+
+function isSameHistoryItem(item, target) {
+  return item.createdAt === target.createdAt && item.folderName === target.folderName;
 }
 
 async function refreshSignedInUser() {
@@ -840,6 +1020,20 @@ function readAllDirectoryEntries(reader) {
 
 function encodePathSegment(segment) {
   return encodeURIComponent(segment);
+}
+
+function getSelectedValidityDays() {
+  const days = Number(elements.validitySelect.value);
+  return [7, 30, 60, 90].includes(days) ? days : defaultValidityDays;
+}
+
+function buildExpirationDate(days) {
+  const expiresAt = new Date(Date.now() + Number(days) * 24 * 60 * 60 * 1000);
+  return formatGraphDateTime(expiresAt);
+}
+
+function formatGraphDateTime(date) {
+  return date.toISOString().replace(/\.\d{3}Z$/, "Z");
 }
 
 function formatBytes(bytes) {

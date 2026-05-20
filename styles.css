@@ -14,7 +14,8 @@ body {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
@@ -182,7 +183,8 @@ h2 {
   margin-bottom: 18px;
 }
 
-.field input {
+.field input,
+.field select {
   width: 100%;
   height: 44px;
   border: 1px solid #cbd8e4;
@@ -296,6 +298,26 @@ h2 {
   padding: 0 12px;
   color: #fff;
   background: #0e7c61;
+}
+
+.renewButton {
+  min-width: 86px;
+  min-height: 36px;
+  border: 0;
+  border-radius: 6px;
+  padding: 0 10px;
+  color: #18415f;
+  background: #e8f1f8;
+  font-weight: 700;
+}
+
+.renewSelect {
+  min-height: 36px;
+  border: 1px solid #cbd8e4;
+  border-radius: 6px;
+  padding: 0 8px;
+  color: #18415f;
+  background: #fff;
 }
 
 .iconButton {
@@ -439,6 +461,14 @@ h2 {
 
 .linkItem strong {
   overflow-wrap: anywhere;
+}
+
+.linkActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 @media (max-width: 820px) {
