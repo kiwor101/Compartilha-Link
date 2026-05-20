@@ -1,64 +1,109 @@
 # Compartilha Link
 
-Aplicativo interno para enviar documentos ao OneDrive corporativo e gerar links externos de forma simples.
+Aplicativo interno da Santa Casa de Andradina para enviar arquivos ao OneDrive corporativo e gerar links externos com validade definida.
 
-O objetivo e facilitar o dia a dia de setores que precisam compartilhar prontuarios, documentos de prestacao de contas, imagens e arquivos grandes sem depender da interface completa do OneDrive.
-
-## O que o app faz
-
-- Login com conta Microsoft corporativa do dominio `@santacasaandradina.org`.
-- Envio de varios arquivos de uma unica vez.
-- Suporte a arrastar arquivos ou pastas inteiras para a tela.
-- Upload de arquivos pequenos e grandes usando Microsoft Graph.
-- Criacao de pasta dentro de `Compartilhamentos Externos`.
-- Geracao de link externo com validade de 7, 30, 60 ou 90 dias.
-- Historico por usuario salvo no proprio OneDrive.
-- Busca no historico por nome da pasta ou data.
-- Renovacao de links vencidos.
-- Pagina administrativa para listar e apagar pastas antigas com base no historico.
+O foco do projeto e simplificar uma tarefa comum: o usuario entra com a conta Microsoft corporativa, escolhe os arquivos ou uma pasta inteira, define o nome da pasta e recebe um link pronto para copiar.
 
 ## Enderecos
 
 Aplicativo principal:
 
 ```text
+https://compartilhalink.santacasaandradina.org/
+```
+
+Endereco original do GitHub Pages:
+
+```text
 https://kiwor101.github.io/Compartilha-Link/
 ```
 
-Pagina administrativa:
+Pagina administrativa, mantida apenas para uso interno da TI:
 
 ```text
 https://kiwor101.github.io/Compartilha-Link/admin.html
 ```
 
-## Estrutura importante
+## Funcionalidades
+
+- Login com conta Microsoft do dominio `@santacasaandradina.org`.
+- Upload de varios arquivos de uma vez.
+- Suporte a arquivos grandes usando sessao de upload do Microsoft Graph.
+- Suporte a arrastar arquivos ou pastas inteiras para a tela.
+- Criacao automatica da pasta base `Compartilhamentos Externos`.
+- Criacao de uma pasta por envio, usando o nome informado pelo usuario.
+- Bloqueio para evitar criar duas pastas com o mesmo nome no historico.
+- Geracao de link externo com validade de 7, 30, 60 ou 90 dias.
+- Validade padrao de 90 dias.
+- Historico salvo no OneDrive da conta logada.
+- Busca no historico por nome da pasta ou data.
+- Botao de renovacao exibido apenas quando o link esta vencido.
+- Limpeza da lista de arquivos apos envio concluido.
+- Pagina administrativa para localizar e apagar pastas antigas.
+
+## Como o usuario usa
+
+1. Acessa o aplicativo principal.
+2. Clica em `Login`.
+3. Entra com a conta corporativa.
+4. Informa o `Nome da pasta`.
+5. Escolhe a validade do link.
+6. Seleciona ou arrasta os arquivos.
+7. Clica em `Enviar e gerar links`.
+8. Copia o link gerado no historico.
+
+O nome da pasta deve ser algo facil de localizar depois, como paciente, prontuario, processo ou prestacao de contas.
+
+## Onde os arquivos ficam
+
+Os arquivos ficam no OneDrive da propria conta que fez login.
+
+Estrutura padrao:
 
 ```text
-index.html          Tela principal do app
-app.js              Login, upload, links e historico
-admin.html          Tela administrativa
-admin.js            Busca e limpeza de pastas antigas
-styles.css          Interface visual
-config.js           IDs do aplicativo Microsoft
-static/             Pasta publicada pelo GitHub Pages
+OneDrive
+└── Compartilhamentos Externos
+    ├── Nome da pasta criada pelo usuario
+    └── _Compartilha Link Sistema
+        └── historico.json
 ```
 
-Importante: o GitHub Pages deste projeto publica a pasta `static/`. Sempre que alterar arquivos da raiz usados no site, mantenha a copia correspondente dentro de `static/`.
+O arquivo `historico.json` guarda os links exibidos no app. Ele tambem fica no OneDrive do usuario logado.
+
+## Estrutura do projeto
+
+```text
+index.html       Tela principal
+app.js           Login, upload, links, validade e historico
+admin.html       Tela administrativa da TI
+admin.js         Busca e limpeza de pastas antigas
+styles.css       Interface visual
+config.js        Dados do aplicativo Microsoft
+favicon.svg      Icone do site/favoritos
+static/          Arquivos publicados pelo GitHub Pages
+```
+
+Importante: o GitHub Pages publica a pasta `static/`. Quando alterar `index.html`, `app.js`, `admin.html`, `admin.js`, `styles.css`, `config.js` ou `favicon.svg` na raiz, mantenha a copia correspondente em `static/`.
 
 ## Configuracao Microsoft Entra
 
-O app usa Microsoft Graph com login delegado. A aplicacao registrada no Microsoft Entra precisa ter:
-
-- Tipo: Single-page application (SPA)
-- Redirect URI principal:
+Aplicativo registrado no Microsoft Entra:
 
 ```text
-https://kiwor101.github.io/Compartilha-Link/
+Compartilha Link
 ```
 
-- Redirect URI administrativa:
+Tipo da plataforma:
 
 ```text
+Single-page application (SPA)
+```
+
+Redirect URIs cadastradas:
+
+```text
+https://compartilhalink.santacasaandradina.org/
+https://kiwor101.github.io/Compartilha-Link/
 https://kiwor101.github.io/Compartilha-Link/admin.html
 ```
 
@@ -69,11 +114,11 @@ User.Read
 Files.ReadWrite
 ```
 
-Essas permissoes precisam estar consentidas pelo administrador.
+Essas permissoes precisam estar concedidas pelo administrador do locatario.
 
-## Configuracao do app
+## Configuracao local
 
-O arquivo `config.js` define os dados do Microsoft Entra:
+O arquivo `config.js` contem os dados usados pelo app:
 
 ```js
 window.APP_CONFIG = {
@@ -83,49 +128,102 @@ window.APP_CONFIG = {
 };
 ```
 
+No projeto atual:
+
+```text
+Client ID: 03b8c0d8-3d68-44c2-a2f6-18c09d7c3bca
+Tenant ID: 251017e3-b3a8-40f0-b6fe-57b159bcc5d8
+```
+
 ## Publicacao
 
-O deploy e feito pelo GitHub Actions em:
+O deploy e feito pelo GitHub Pages usando GitHub Actions.
+
+Workflow:
 
 ```text
 .github/workflows/pages.yml
 ```
 
-Ele publica a pasta:
+Branch:
+
+```text
+main
+```
+
+Pasta publicada:
 
 ```text
 static
 ```
 
-Depois de um push na branch `main`, o GitHub Pages pode levar alguns minutos para atualizar. Se parecer que nada mudou, abra com um parametro de cache:
+Depois de enviar alteracoes para a branch `main`, o GitHub Pages pode levar alguns minutos para atualizar.
+
+Para forcar teste sem cache:
 
 ```text
-https://kiwor101.github.io/Compartilha-Link/?nocache=1
+https://compartilhalink.santacasaandradina.org/?nocache=1
 ```
 
-## Sugestao de endereco melhor
+## Dominio
 
-O endereco `kiwor101.github.io` funciona, mas nao e ideal para uso interno.
-
-A melhor opcao sem custo adicional e criar um subdominio no dominio que a instituicao ja possui, por exemplo:
+O dominio principal esta configurado como subdominio:
 
 ```text
-compartilha.santacasaandradina.org
+compartilhalink.santacasaandradina.org
 ```
 
-ou:
+No DNS da Hostinger, o subdominio aponta para:
 
 ```text
-links.santacasaandradina.org
+kiwor101.github.io
 ```
 
-Esse subdominio pode apontar para o GitHub Pages usando DNS. O GitHub Pages permite dominio personalizado sem cobrar por isso. O unico custo seria ter o dominio, mas nesse caso a instituicao ja usa `santacasaandradina.org`.
+Tipo de registro:
 
-Depois de configurar o dominio, tambem sera necessario cadastrar a nova URL como Redirect URI no Microsoft Entra.
+```text
+CNAME
+```
 
-## Observacoes de seguranca
+O dominio de e-mail Microsoft 365 pode continuar funcionando normalmente. O subdominio usado pelo app e separado dos registros MX, SPF, DKIM e autodiscover.
 
-- Os arquivos ficam no OneDrive da conta que fez login.
-- O historico tambem fica no OneDrive da conta logada.
-- Links externos devem ser usados com validade curta sempre que possivel.
+## Pagina administrativa
+
+A pagina `admin.html` foi criada para a TI localizar pastas antigas dentro de `Compartilhamentos Externos`.
+
+Ela permite:
+
+- Escolher um periodo de corte de 1 a 10 anos.
+- Buscar pastas antigas.
+- Apagar as pastas encontradas.
+
+Como ela age no OneDrive da conta logada, a TI deve entrar com a conta que possui os arquivos que serao analisados.
+
+## Seguranca e cuidados
+
+- O app nao armazena arquivos fora do Microsoft 365.
+- O link externo deve ser usado somente quando necessario.
+- A validade do link reduz o risco de acesso antigo continuar aberto.
 - Documentos sensiveis devem seguir as regras internas da instituicao.
+- Quem recebe o link pode acessar o conteudo enquanto o link estiver valido.
+- O app usa permissao delegada: ele age como o usuario logado, nao como administrador global.
+
+## Testes ja realizados
+
+- Login no dominio principal.
+- Upload real manual.
+- Geracao de link externo.
+- Historico por usuario.
+- Busca por nome da pasta.
+- Busca por data.
+- Validade exibida no historico.
+- Lista de arquivos limpa apos envio.
+- Validacao para nao enviar sem nome de pasta.
+- Checagem local de JavaScript.
+- Checagem de consistencia entre raiz e `static/`.
+
+## Observacao tecnica
+
+O app e estatico e roda direto no navegador. A comunicacao com o Microsoft 365 e feita pelo Microsoft Graph usando OAuth/PKCE.
+
+Nao ha backend proprio, banco de dados externo ou servidor pago.
