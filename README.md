@@ -1,136 +1,131 @@
-# Link Facil OneDrive
+# Compartilha Link
 
-Modelo inicial de app para usuários internos enviarem arquivos para o OneDrive corporativo e receberem um link externo pronto para copiar.
+Aplicativo interno para enviar documentos ao OneDrive corporativo e gerar links externos de forma simples.
 
-Este repositório tem duas opções:
+O objetivo e facilitar o dia a dia de setores que precisam compartilhar prontuarios, documentos de prestacao de contas, imagens e arquivos grandes sem depender da interface completa do OneDrive.
 
-- Raiz do repositório: protótipo simples para GitHub Pages, sem instalação e sem build.
-- `static/`: cópia do protótipo simples.
-- `src/`: versão React/TypeScript para virar produto com build, testes e deploy depois.
+## O que o app faz
 
-## O que este modelo faz
+- Login com conta Microsoft corporativa do dominio `@santacasaandradina.org`.
+- Envio de varios arquivos de uma unica vez.
+- Suporte a arrastar arquivos ou pastas inteiras para a tela.
+- Upload de arquivos pequenos e grandes usando Microsoft Graph.
+- Criacao de pasta dentro de `Compartilhamentos Externos`.
+- Geracao de link externo com validade de 7, 30, 60 ou 90 dias.
+- Historico por usuario salvo no proprio OneDrive.
+- Busca no historico por nome da pasta ou data.
+- Renovacao de links vencidos.
+- Pagina administrativa para listar e apagar pastas antigas com base no historico.
 
-- Login com conta Microsoft corporativa.
-- Upload de um ou mais arquivos para o OneDrive do usuário logado.
-- Organização automática por pasta, setor e data.
-- Criação de link `Qualquer pessoa com o link pode visualizar`.
-- Botão para copiar o link gerado.
+## Enderecos
 
-## Configuração no Microsoft Entra ID
-
-1. Acesse o Microsoft Entra admin center.
-2. Vá em **App registrations** e crie um novo registro.
-3. Em **Supported account types**, escolha apenas contas deste diretório organizacional.
-4. Em **Redirect URI**, selecione **Single-page application (SPA)** e informe:
-
-   ```text
-   http://localhost:5173
-   ```
-
-   Para testar a versão estática deste protótipo, também cadastre:
-
-   ```text
-   http://localhost:8080
-   ```
-
-5. Copie o **Application (client) ID**.
-6. Copie o **Directory (tenant) ID**.
-7. Em **API permissions**, adicione permissões delegadas do Microsoft Graph:
-
-   ```text
-   User.Read
-   Files.ReadWrite
-   ```
-
-8. Conceda consentimento administrativo, se o tenant exigir.
-
-## Teste rápido sem instalação
-
-Edite `static/config.js`:
-
-```text
-window.APP_CONFIG = {
-  microsoftClientId: "seu-client-id",
-  microsoftTenantId: "seu-tenant-id",
-  uploadRootFolder: "Compartilhamentos Externos"
-};
-```
-
-Depois rode um servidor local dentro da pasta `static`.
-
-Se tiver Python instalado:
-
-```text
-python -m http.server 8080
-```
-
-Abra:
-
-```text
-http://localhost:8080
-```
-
-## Publicar pelo GitHub Pages do jeito mais simples
-
-Depois de enviar os arquivos para o GitHub:
-
-1. Abra o repositório no GitHub.
-2. Vá em **Settings**.
-3. Vá em **Pages**.
-4. Em **Build and deployment**, selecione:
-
-   ```text
-   Source: Deploy from a branch
-   ```
-
-5. Em **Branch**, selecione:
-
-   ```text
-   main
-   ```
-
-6. Ao lado, selecione:
-
-   ```text
-   / (root)
-   ```
-
-7. Clique em **Save**.
-
-A URL esperada será parecida com:
+Aplicativo principal:
 
 ```text
 https://kiwor101.github.io/Compartilha-Link/
 ```
 
-Cadastre essa URL no Microsoft Entra ID como Redirect URI de **Single-page application (SPA)**.
-
-## Versão React
-
-Crie um arquivo `.env` a partir de `.env.example`:
+Pagina administrativa:
 
 ```text
-VITE_MS_CLIENT_ID=seu-client-id
-VITE_MS_TENANT_ID=seu-tenant-id
-VITE_UPLOAD_ROOT_FOLDER=Compartilhamentos Externos
+https://kiwor101.github.io/Compartilha-Link/admin.html
 ```
 
-Depois instale e rode:
+## Estrutura importante
 
 ```text
-npm install
-npm run dev
+index.html          Tela principal do app
+app.js              Login, upload, links e historico
+admin.html          Tela administrativa
+admin.js            Busca e limpeza de pastas antigas
+styles.css          Interface visual
+config.js           IDs do aplicativo Microsoft
+static/             Pasta publicada pelo GitHub Pages
 ```
 
-Abra:
+Importante: o GitHub Pages deste projeto publica a pasta `static/`. Sempre que alterar arquivos da raiz usados no site, mantenha a copia correspondente dentro de `static/`.
+
+## Configuracao Microsoft Entra
+
+O app usa Microsoft Graph com login delegado. A aplicacao registrada no Microsoft Entra precisa ter:
+
+- Tipo: Single-page application (SPA)
+- Redirect URI principal:
 
 ```text
-http://localhost:5173
+https://kiwor101.github.io/Compartilha-Link/
 ```
 
-## Observações importantes
+- Redirect URI administrativa:
 
-- Este primeiro modelo usa upload simples do Microsoft Graph, limitado a 250 MB por arquivo.
-- Para arquivos maiores, a próxima evolução é usar `createUploadSession`.
-- O link externo depende da política do OneDrive/SharePoint da organização. Se links anônimos estiverem bloqueados no tenant, a Microsoft recusará a criação do link.
-- Para prontuários e documentos sensíveis, é recomendado adicionar expiração de link, histórico e regras por setor antes de uso em produção.
+```text
+https://kiwor101.github.io/Compartilha-Link/admin.html
+```
+
+Permissoes delegadas do Microsoft Graph:
+
+```text
+User.Read
+Files.ReadWrite
+```
+
+Essas permissoes precisam estar consentidas pelo administrador.
+
+## Configuracao do app
+
+O arquivo `config.js` define os dados do Microsoft Entra:
+
+```js
+window.APP_CONFIG = {
+  microsoftClientId: "CLIENT_ID",
+  microsoftTenantId: "TENANT_ID",
+  uploadRootFolder: "Compartilhamentos Externos"
+};
+```
+
+## Publicacao
+
+O deploy e feito pelo GitHub Actions em:
+
+```text
+.github/workflows/pages.yml
+```
+
+Ele publica a pasta:
+
+```text
+static
+```
+
+Depois de um push na branch `main`, o GitHub Pages pode levar alguns minutos para atualizar. Se parecer que nada mudou, abra com um parametro de cache:
+
+```text
+https://kiwor101.github.io/Compartilha-Link/?nocache=1
+```
+
+## Sugestao de endereco melhor
+
+O endereco `kiwor101.github.io` funciona, mas nao e ideal para uso interno.
+
+A melhor opcao sem custo adicional e criar um subdominio no dominio que a instituicao ja possui, por exemplo:
+
+```text
+compartilha.santacasaandradina.org
+```
+
+ou:
+
+```text
+links.santacasaandradina.org
+```
+
+Esse subdominio pode apontar para o GitHub Pages usando DNS. O GitHub Pages permite dominio personalizado sem cobrar por isso. O unico custo seria ter o dominio, mas nesse caso a instituicao ja usa `santacasaandradina.org`.
+
+Depois de configurar o dominio, tambem sera necessario cadastrar a nova URL como Redirect URI no Microsoft Entra.
+
+## Observacoes de seguranca
+
+- Os arquivos ficam no OneDrive da conta que fez login.
+- O historico tambem fica no OneDrive da conta logada.
+- Links externos devem ser usados com validade curta sempre que possivel.
+- Documentos sensiveis devem seguir as regras internas da instituicao.
