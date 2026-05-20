@@ -255,10 +255,23 @@ async function uploadFilesAndCreateFolderLink(accessToken, files, sector) {
       file.size <= maxSimpleUploadSize
         ? await uploadSmallFile(accessToken, uploadPath, file)
         : await uploadLargeFile(accessToken, uploadPath, file);
+
+    const filePermission = await createFileSharingLink(accessToken, uploadedItem.id);
+    const fileWebUrl = extractSharingUrl(filePermission);
+
+    if (!fileWebUrl) {
+      throw new Error(
+        `Arquivo enviado, mas a Microsoft nao retornou o link do arquivo ${relativePath}. Detalhe tecnico: ${JSON.stringify(
+          filePermission
+        ).slice(0, 1200)}`
+      );
+    }
+
     uploadedFiles.push({
       fileName: uploadParts.join("/"),
       id: uploadedItem.id,
-      size: uploadedItem.size || file.size
+      size: uploadedItem.size || file.size,
+      webUrl: fileWebUrl
     });
   }
 
@@ -268,21 +281,26 @@ async function uploadFilesAndCreateFolderLink(accessToken, files, sector) {
   });
 
   let webUrl = "";
-  let linkMode = "folder";
-  let fileLinks = [];
+  let linkMode = "files";
+  let fileLinks = uploadedFiles.map((file) => ({
+    fileName: file.fileName,
+    webUrl: file.webUrl,
+    size: file.size
+  }));
   let folderLinkError = "";
 
   try {
     const permission = await createSharingLink(accessToken, folderItem.id, folderItemPath);
     webUrl = await resolveSharingUrl(accessToken, folderItem.id, permission);
+    if (webUrl) {
+      linkMode = "folder";
+    }
   } catch (error) {
     folderLinkError = error?.message || "Falha ao gerar link da pasta.";
     webUrl = "";
   }
 
   if (!webUrl) {
-    linkMode = "files";
-    fileLinks = await createFileLinks(accessToken, uploadedFiles);
     webUrl = fileLinks[0]?.webUrl || "";
   }
 
@@ -530,8 +548,7 @@ async function graphRequest(accessToken, endpoint, init) {
     throw await graphError(response);
   }
 
-  const history = await response.json();
-  return Array.isArray(history) ? history : [];
+  return response.json();
 }
 
 async function graphError(response) {
