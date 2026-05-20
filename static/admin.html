@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Compartilha Link - Administracao</title>
+    <link rel="stylesheet" href="./styles.css?v=4" />
+    <script src="./config.js"></script>
+    <script src="./admin.js?v=1" defer></script>
+  </head>
+  <body>
+    <main class="shell">
+      <section class="workspace">
+        <header class="topbar">
+          <div class="brandBlock">
+            <h1>Administracao</h1>
+          </div>
+          <button id="logoutButton" class="ghostButton hidden" type="button">Sair</button>
+        </header>
+
+        <section id="loginPanel" class="loginPanel">
+          <h1 class="loginTitle">Administracao</h1>
+          <button id="loginButton" class="primaryButton loginButton" type="button">Login</button>
+          <p class="loginNote">Acesso permitido apenas com conta corporativa do dominio @santacasaandradina.org.</p>
+          <p id="loginStatus" class="status"></p>
+        </section>
+
+        <section id="adminPanel" class="grid hidden">
+          <div class="panel">
+            <div class="accountLine">
+              <span>Conectado como</span>
+              <strong id="accountName">-</strong>
+            </div>
+
+            <label class="field">
+              <span>Local de limpeza:</span>
+              <input value="Compartilhamentos Externos" disabled />
+            </label>
+
+            <label class="field">
+              <span>Buscar links vencidos ha mais de:</span>
+              <select id="ageSelect">
+                <option value="1" selected>1 ano</option>
+                <option value="2">2 anos</option>
+                <option value="3">3 anos</option>
+                <option value="4">4 anos</option>
+                <option value="5">5 anos</option>
+                <option value="6">6 anos</option>
+                <option value="7">7 anos</option>
+                <option value="8">8 anos</option>
+                <option value="9">9 anos</option>
+                <option value="10">10 anos</option>
+              </select>
+            </label>
+
+            <button id="scanButton" class="primaryButton" type="button">Buscar pastas antigas</button>
+            <button id="deleteButton" class="dangerButton" type="button" disabled>Apagar pastas encontradas</button>
+
+            <p id="statusMessage" class="status"></p>
+          </div>
+
+          <div class="panel resultsPanel">
+            <div class="panelHeader">
+              <h2>Pastas encontradas</h2>
+              <span id="resultCount">0</span>
+            </div>
+            <div id="emptyState" class="emptyState">
+              <span class="clipboardIcon">ADM</span>
+              <p>Use a busca para listar pastas antigas antes de apagar.</p>
+            </div>
+            <div id="resultList" class="linkList"></div>
+          </div>
+        </section>
+      </section>
+    </main>
+  </body>
+</html>

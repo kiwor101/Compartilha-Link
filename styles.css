@@ -251,6 +251,7 @@ h2 {
 }
 
 .primaryButton,
+.dangerButton,
 .ghostButton,
 .copyButton,
 .iconButton {
@@ -276,6 +277,19 @@ h2 {
   background: #005b96;
   box-shadow: 0 12px 26px rgba(0, 91, 150, 0.22);
   transform: translateY(-1px);
+}
+
+.dangerButton {
+  width: 100%;
+  min-height: 44px;
+  margin-top: 12px;
+  padding: 0 18px;
+  color: #fff;
+  background: #b42318;
+}
+
+.dangerButton:hover {
+  background: #971b13;
 }
 
 .loginButton {
