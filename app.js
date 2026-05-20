@@ -201,9 +201,13 @@ async function uploadSelectedFiles() {
   setStatus("Preparando envio...", "");
 
   try {
+    const folderName = getRequiredFolderName();
+    if (!folderName) {
+      throw new Error("Informe o nome da pasta antes de enviar.");
+    }
+
     const token = await getAccessToken();
     const results = [];
-    const folderName = normalizeFolderName(elements.sectorInput.value);
     const validityDays = getSelectedValidityDays();
     const expiresAt = buildExpirationDate(validityDays);
 
@@ -292,7 +296,7 @@ async function getAccessToken() {
 
 async function uploadFilesAndCreateFolderLink(accessToken, files, sector, linkOptions = {}) {
   const rootFolder = config.uploadRootFolder || "Compartilhamentos Externos";
-  const folderName = normalizeFolderName(sector);
+  const folderName = getNormalizedRequiredFolderName(sector);
   const folderPath = [rootFolder, folderName];
   const validityDays = linkOptions.validityDays || defaultValidityDays;
   const expiresAt = linkOptions.expiresAt || buildExpirationDate(validityDays);
@@ -303,7 +307,6 @@ async function uploadFilesAndCreateFolderLink(accessToken, files, sector, linkOp
 
   for (const file of files) {
     const relativePath = normalizeRelativePath(file.relativePath || file.webkitRelativePath || file.name);
-    setStatus(`Enviando ${relativePath}...`, "");
     const uploadParts = relativePath.split("/").filter(Boolean).map(sanitizePathSegment);
 
     if (uploadParts.length > 1) {
@@ -978,6 +981,15 @@ function hideUploadProgress() {
 
 function normalizeFolderName(value) {
   return sanitizePathSegment(value.trim() || "Geral");
+}
+
+function getRequiredFolderName() {
+  return getNormalizedRequiredFolderName(elements.sectorInput.value);
+}
+
+function getNormalizedRequiredFolderName(value) {
+  const rawValue = String(value || "").trim();
+  return rawValue ? sanitizePathSegment(rawValue) : "";
 }
 
 function sanitizePathSegment(value) {
