@@ -1,10 +1,12 @@
 # Compartilha Link
 
+Status: projeto finalizado.
+
 Aplicativo interno da Santa Casa de Andradina para enviar arquivos ao OneDrive corporativo e gerar links externos com validade definida.
 
-O foco do projeto e simplificar uma tarefa comum: o usuario entra com a conta Microsoft corporativa, escolhe os arquivos ou uma pasta inteira, define o nome da pasta e recebe um link pronto para copiar.
+O objetivo e simplificar o envio de documentos para usuarios leigos: a pessoa entra com a conta Microsoft corporativa, escolhe os arquivos ou uma pasta inteira, informa o nome da pasta e recebe um link pronto para copiar.
 
-## Enderecos
+## Acesso
 
 Aplicativo principal:
 
@@ -24,12 +26,31 @@ Pagina administrativa, mantida apenas para uso interno da TI:
 https://kiwor101.github.io/Compartilha-Link/admin.html
 ```
 
-## Funcionalidades
+## Guia de uso
+
+O guia simples para usuarios finais esta disponivel em PDF:
+
+```text
+docs/Guia de Uso - Compartilha Link.pdf
+```
+
+Esse guia mostra o fluxo basico:
+
+- Acessar o sistema.
+- Fazer login com a conta corporativa.
+- Informar o nome da pasta.
+- Escolher a validade do link.
+- Selecionar ou arrastar arquivos.
+- Enviar e copiar o link gerado.
+- Pesquisar links no historico.
+
+## Funcionalidades entregues
 
 - Login com conta Microsoft do dominio `@santacasaandradina.org`.
 - Upload de varios arquivos de uma vez.
 - Suporte a arquivos grandes usando sessao de upload do Microsoft Graph.
 - Suporte a arrastar arquivos ou pastas inteiras para a tela.
+- Suporte a arquivos compactados, como ZIP e RAR.
 - Criacao automatica da pasta base `Compartilhamentos Externos`.
 - Criacao de uma pasta por envio, usando o nome informado pelo usuario.
 - Bloqueio para evitar criar duas pastas com o mesmo nome no historico.
@@ -40,6 +61,7 @@ https://kiwor101.github.io/Compartilha-Link/admin.html
 - Botao de renovacao exibido apenas quando o link esta vencido.
 - Limpeza da lista de arquivos apos envio concluido.
 - Pagina administrativa para localizar e apagar pastas antigas.
+- Icone do site para favoritos.
 
 ## Como o usuario usa
 
@@ -62,10 +84,10 @@ Estrutura padrao:
 
 ```text
 OneDrive
-└── Compartilhamentos Externos
-    ├── Nome da pasta criada pelo usuario
-    └── _Compartilha Link Sistema
-        └── historico.json
+Compartilhamentos Externos
+Nome da pasta criada pelo usuario
+_Compartilha Link Sistema
+historico.json
 ```
 
 O arquivo `historico.json` guarda os links exibidos no app. Ele tambem fica no OneDrive do usuario logado.
@@ -80,10 +102,11 @@ admin.js         Busca e limpeza de pastas antigas
 styles.css       Interface visual
 config.js        Dados do aplicativo Microsoft
 favicon.svg      Icone do site/favoritos
+docs/            Guia de uso em PDF
 static/          Arquivos publicados pelo GitHub Pages
 ```
 
-Importante: o GitHub Pages publica a pasta `static/`. Quando alterar `index.html`, `app.js`, `admin.html`, `admin.js`, `styles.css`, `config.js` ou `favicon.svg` na raiz, mantenha a copia correspondente em `static/`.
+Importante: o GitHub Pages publica a pasta `static/`. Quando alterar arquivos da raiz usados pelo aplicativo, mantenha a copia correspondente em `static/`.
 
 ## Configuracao Microsoft Entra
 
@@ -116,25 +139,6 @@ Files.ReadWrite
 
 Essas permissoes precisam estar concedidas pelo administrador do locatario.
 
-## Configuracao local
-
-O arquivo `config.js` contem os dados usados pelo app:
-
-```js
-window.APP_CONFIG = {
-  microsoftClientId: "CLIENT_ID",
-  microsoftTenantId: "TENANT_ID",
-  uploadRootFolder: "Compartilhamentos Externos"
-};
-```
-
-No projeto atual:
-
-```text
-Client ID: 03b8c0d8-3d68-44c2-a2f6-18c09d7c3bca
-Tenant ID: 251017e3-b3a8-40f0-b6fe-57b159bcc5d8
-```
-
 ## Publicacao
 
 O deploy e feito pelo GitHub Pages usando GitHub Actions.
@@ -159,12 +163,6 @@ static
 
 Depois de enviar alteracoes para a branch `main`, o GitHub Pages pode levar alguns minutos para atualizar.
 
-Para forcar teste sem cache:
-
-```text
-https://compartilhalink.santacasaandradina.org/?nocache=1
-```
-
 ## Dominio
 
 O dominio principal esta configurado como subdominio:
@@ -185,7 +183,7 @@ Tipo de registro:
 CNAME
 ```
 
-O dominio de e-mail Microsoft 365 pode continuar funcionando normalmente. O subdominio usado pelo app e separado dos registros MX, SPF, DKIM e autodiscover.
+O dominio de e-mail Microsoft 365 continua funcionando normalmente. O subdominio usado pelo app e separado dos registros MX, SPF, DKIM e autodiscover.
 
 ## Pagina administrativa
 
@@ -208,7 +206,7 @@ Como ela age no OneDrive da conta logada, a TI deve entrar com a conta que possu
 - Quem recebe o link pode acessar o conteudo enquanto o link estiver valido.
 - O app usa permissao delegada: ele age como o usuario logado, nao como administrador global.
 
-## Testes ja realizados
+## Testes realizados
 
 - Login no dominio principal.
 - Upload real manual.
@@ -221,6 +219,7 @@ Como ela age no OneDrive da conta logada, a TI deve entrar com a conta que possu
 - Validacao para nao enviar sem nome de pasta.
 - Checagem local de JavaScript.
 - Checagem de consistencia entre raiz e `static/`.
+- Guia de uso em PDF criado e revisado.
 
 ## Observacao tecnica
 
