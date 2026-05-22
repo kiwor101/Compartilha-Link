@@ -59,9 +59,9 @@ elements.fileInput.addEventListener("change", () => {
 elements.clearButton.addEventListener("click", clearFiles);
 elements.uploadButton.addEventListener("click", uploadSelectedFiles);
 elements.historySearch.addEventListener("input", () => renderLinks(linkHistory));
-elements.dropzone.addEventListener("dragover", handleDragOver);
+elements.dropzone.addEventListener("dragover", handleDragOver, true);
 elements.dropzone.addEventListener("dragleave", handleDragLeave);
-elements.dropzone.addEventListener("drop", handleDrop);
+elements.dropzone.addEventListener("drop", handleDrop, true);
 
 initialize();
 
@@ -238,6 +238,7 @@ async function uploadSelectedFiles() {
 
 function handleDragOver(event) {
   event.preventDefault();
+  event.stopPropagation();
   elements.dropzone.classList.add("isDragging");
 }
 
@@ -249,6 +250,7 @@ function handleDragLeave(event) {
 
 async function handleDrop(event) {
   event.preventDefault();
+  event.stopPropagation();
   elements.dropzone.classList.remove("isDragging");
   setStatus("Lendo arquivos selecionados...", "");
 
@@ -1052,11 +1054,12 @@ function mapSelectedFiles(fileList) {
 }
 
 async function readDroppedFiles(dataTransfer) {
+  const transferFiles = mapSelectedFiles(dataTransfer?.files || []);
   const items = Array.from(dataTransfer?.items || []);
   const supportsDirectoryDrop = items.some((item) => typeof item.webkitGetAsEntry === "function");
 
   if (!supportsDirectoryDrop) {
-    return mapSelectedFiles(dataTransfer?.files || []);
+    return transferFiles;
   }
 
   const files = [];
@@ -1076,7 +1079,25 @@ async function readDroppedFiles(dataTransfer) {
     files.push(...(await readEntryFiles(entry, "")));
   }
 
-  return files;
+  return mergeUniqueFiles(files, transferFiles);
+}
+
+function mergeUniqueFiles(primaryFiles, fallbackFiles) {
+  const merged = [];
+  const seen = new Set();
+
+  for (const file of [...primaryFiles, ...fallbackFiles]) {
+    const key = `${file.relativePath || file.webkitRelativePath || file.name}|${file.size}|${file.lastModified}`;
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    file.relativePath = file.relativePath || file.webkitRelativePath || file.name;
+    merged.push(file);
+  }
+
+  return merged;
 }
 
 async function readEntryFiles(entry, parentPath) {
