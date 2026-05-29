@@ -400,12 +400,32 @@ body:has(#adminPanel) .loginPanel::before {
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.9) inset;
 }
 
+.syncHistoryButton {
+  width: 100%;
+  border: 1px solid #c8d8e5;
+  background: #f5f9fc;
+}
+
 .copyButton {
   min-width: 102px;
   min-height: 38px;
   padding: 0 12px;
   color: #fff;
   background: var(--success);
+}
+
+.openFolderButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 102px;
+  min-height: 38px;
+  border-radius: 6px;
+  padding: 0 12px;
+  color: #18415f;
+  background: #e8f1f8;
+  font-weight: 700;
+  text-decoration: none;
 }
 
 .renewButton {
@@ -614,6 +634,18 @@ body:has(#adminPanel) .loginPanel::before {
   gap: 10px;
 }
 
+.historyTools {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.historyTools .field {
+  margin-bottom: 0;
+}
+
 .linkItem {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -659,6 +691,10 @@ body:has(#adminPanel) .loginPanel::before {
   }
 
   .grid {
+    grid-template-columns: 1fr;
+  }
+
+  .historyTools {
     grid-template-columns: 1fr;
   }
 

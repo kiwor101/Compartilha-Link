@@ -48,6 +48,7 @@ const elements = {
   linkCount: document.querySelector("#linkCount"),
   emptyState: document.querySelector("#emptyState"),
   historySearch: document.querySelector("#historySearch"),
+  syncHistoryButton: document.querySelector("#syncHistoryButton"),
   linkList: document.querySelector("#linkList")
 };
 
@@ -66,6 +67,7 @@ elements.folderInput.addEventListener("change", () => {
 elements.clearButton.addEventListener("click", clearFiles);
 elements.uploadButton.addEventListener("click", uploadSelectedFiles);
 elements.historySearch.addEventListener("input", () => renderLinks(linkHistory));
+elements.syncHistoryButton.addEventListener("click", syncHistory);
 elements.dropzone.addEventListener("dragover", handleDragOver, true);
 elements.dropzone.addEventListener("dragleave", handleDragLeave);
 elements.dropzone.addEventListener("drop", handleDrop, true);
@@ -813,6 +815,16 @@ function renderLinks(links) {
       }, 1800);
     });
 
+    if (link.linkMode !== "files" && link.webUrl) {
+      const openFolderButton = document.createElement("a");
+      openFolderButton.className = "openFolderButton";
+      openFolderButton.href = link.webUrl;
+      openFolderButton.target = "_blank";
+      openFolderButton.rel = "noopener noreferrer";
+      openFolderButton.textContent = "Abrir pasta";
+      actions.append(openFolderButton);
+    }
+
     if (expired) {
       const renewSelect = document.createElement("select");
       renewSelect.className = "renewSelect";
@@ -837,6 +849,67 @@ function renderLinks(links) {
     item.append(info, actions);
     elements.linkList.append(item);
   }
+}
+
+async function syncHistory() {
+  elements.syncHistoryButton.disabled = true;
+  elements.syncHistoryButton.textContent = "Sincronizando...";
+  setStatus("Sincronizando historico com o OneDrive...", "");
+
+  try {
+    const token = await getAccessToken();
+    const latestHistory = await loadHistory(token);
+    const syncedHistory = [];
+    let removedCount = 0;
+    let uncheckedCount = 0;
+
+    for (const link of latestHistory) {
+      try {
+        const exists = await pathExists(token, getHistoryFolderItemPath(link));
+        if (exists) {
+          syncedHistory.push(link);
+        } else {
+          removedCount += 1;
+        }
+      } catch (error) {
+        uncheckedCount += 1;
+        syncedHistory.push(link);
+      }
+    }
+
+    linkHistory = syncedHistory;
+
+    if (removedCount > 0) {
+      await saveHistory(token, linkHistory);
+    }
+
+    renderLinks(linkHistory);
+
+    const uncheckedMessage =
+      uncheckedCount > 0 ? ` ${uncheckedCount} registro(s) nao puderam ser verificados agora.` : "";
+    setStatus(
+      removedCount > 0
+        ? `Historico sincronizado. ${removedCount} registro(s) removido(s).${uncheckedMessage}`
+        : `Historico ja esta sincronizado.${uncheckedMessage}`,
+      uncheckedCount > 0 ? "error" : "done"
+    );
+  } catch (error) {
+    handleAuthExpiredError(error);
+    setStatus(getFriendlyErrorMessage(error, "Nao foi possivel sincronizar o historico."), "error");
+  } finally {
+    elements.syncHistoryButton.disabled = false;
+    elements.syncHistoryButton.textContent = "Sincronizar historico";
+  }
+}
+
+function getHistoryFolderItemPath(link) {
+  if (link.folderItemPath) {
+    return link.folderItemPath;
+  }
+
+  return [config.uploadRootFolder || "Compartilhamentos Externos", normalizeFolderName(link.folderName)]
+    .map(encodePathSegment)
+    .join("/");
 }
 
 async function renewLink(link, validityDays, button) {

@@ -98,10 +98,15 @@
               <h2>Links gerados</h2>
               <span id="linkCount">0</span>
             </div>
-            <label class="field searchField">
-              <span>Pesquisar historico:</span>
-              <input id="historySearch" type="search" placeholder="Buscar por nome da pasta ou data" />
-            </label>
+            <div class="historyTools">
+              <label class="field searchField">
+                <span>Pesquisar historico:</span>
+                <input id="historySearch" type="search" placeholder="Buscar por nome da pasta ou data" />
+              </label>
+              <button id="syncHistoryButton" class="ghostButton syncHistoryButton" type="button">
+                Sincronizar historico
+              </button>
+            </div>
             <div id="emptyState" class="emptyState">
               <span class="clipboardIcon">LK</span>
               <p>Os links aparecem aqui assim que o envio terminar.</p>
