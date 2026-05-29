@@ -326,6 +326,7 @@ async function uploadFilesAndCreateFolderLink(accessToken, files, sector, linkOp
   await ensureFolderPath(accessToken, folderPath);
 
   const uploadedFiles = [];
+  const failedFiles = [];
 
   for (const [index, file] of files.entries()) {
     accessToken = await getAccessToken();
@@ -338,7 +339,19 @@ async function uploadFilesAndCreateFolderLink(accessToken, files, sector, linkOp
 
     const uploadPath = [...folderPath, ...uploadParts].map(encodePathSegment).join("/");
     setStatus(`Enviando arquivo ${index + 1} de ${files.length}...`, "");
-    const uploadedItem = await uploadFileWithRetry(accessToken, uploadPath, file);
+    let uploadedItem = null;
+
+    try {
+      uploadedItem = await uploadFileWithRetry(accessToken, uploadPath, file, uploadParts.join("/"));
+    } catch (error) {
+      failedFiles.push({
+        fileName: uploadParts.join("/"),
+        size: file.size,
+        error: error?.message || "Falha no envio"
+      });
+      addUploadedBytes(file.size);
+      continue;
+    }
 
     addUploadedBytes(file.size);
 
@@ -348,6 +361,22 @@ async function uploadFilesAndCreateFolderLink(accessToken, files, sector, linkOp
       size: uploadedItem.size || file.size,
       webUrl: uploadedItem.webUrl || ""
     });
+  }
+
+  if (uploadedFiles.length === 0) {
+    throw new Error("Nenhum arquivo foi enviado. Verifique a conexao e tente novamente.");
+  }
+
+  if (failedFiles.length > 0) {
+    const names = failedFiles
+      .map((item) => item.fileName)
+      .slice(0, 5)
+      .join(", ");
+    throw new Error(
+      `${failedFiles.length} arquivo(s) nao foram enviados. O link nao foi criado para evitar pasta incompleta. Tente novamente ou remova da lista: ${names}${
+        failedFiles.length > 5 ? "..." : ""
+      }`
+    );
   }
 
   const folderItemPath = folderPath.map(encodePathSegment).join("/");
@@ -415,7 +444,7 @@ async function uploadSmallFile(accessToken, uploadPath, file) {
   });
 }
 
-async function uploadFileWithRetry(accessToken, uploadPath, file) {
+async function uploadFileWithRetry(accessToken, uploadPath, file, displayName) {
   let lastError = null;
 
   for (let attempt = 1; attempt <= networkRetryAttempts; attempt++) {
@@ -437,7 +466,7 @@ async function uploadFileWithRetry(accessToken, uploadPath, file) {
   }
 
   throw new Error(
-    `Nao foi possivel enviar o arquivo ${uploadPath.split("/").pop()}. Verifique a conexao e tente novamente. Detalhe: ${
+    `Nao foi possivel enviar o arquivo ${displayName || decodeURIComponent(uploadPath.split("/").pop() || uploadPath)}. Verifique a conexao e tente novamente. Detalhe: ${
       lastError?.message || "falha desconhecida"
     }`
   );
