@@ -33,6 +33,7 @@ const elements = {
   validitySelect: document.querySelector("#validitySelect"),
   dropzone: document.querySelector(".dropzone"),
   fileInput: document.querySelector("#fileInput"),
+  folderInput: document.querySelector("#folderInput"),
   fileSummary: document.querySelector("#fileSummary"),
   fileList: document.querySelector("#fileList"),
   fileCount: document.querySelector("#fileCount"),
@@ -54,6 +55,11 @@ elements.logoutButton.addEventListener("click", signOut);
 elements.fileInput.addEventListener("change", () => {
   selectedFiles = [...selectedFiles, ...mapSelectedFiles(elements.fileInput.files)];
   elements.fileInput.value = "";
+  renderFileSummary();
+});
+elements.folderInput.addEventListener("change", () => {
+  selectedFiles = [...selectedFiles, ...mapSelectedFiles(elements.folderInput.files)];
+  elements.folderInput.value = "";
   renderFileSummary();
 });
 elements.clearButton.addEventListener("click", clearFiles);
@@ -187,6 +193,7 @@ function renderFileSummary() {
 function clearFiles() {
   selectedFiles = [];
   elements.fileInput.value = "";
+  elements.folderInput.value = "";
   renderFileSummary();
   hideUploadProgress();
 }
@@ -224,7 +231,8 @@ async function uploadSelectedFiles() {
     results.push(result);
 
     linkHistory = [...results, ...linkHistory];
-    await saveHistory(token, linkHistory);
+    const saveToken = await getAccessToken();
+    await saveHistory(saveToken, linkHistory);
     renderLinks(linkHistory);
     clearFiles();
     setStatus("Links criados com sucesso.", "done");
@@ -319,6 +327,7 @@ async function uploadFilesAndCreateFolderLink(accessToken, files, sector, linkOp
   const uploadedFiles = [];
 
   for (const file of files) {
+    accessToken = await getAccessToken();
     const relativePath = normalizeRelativePath(file.relativePath || file.webkitRelativePath || file.name);
     const uploadParts = relativePath.split("/").filter(Boolean).map(sanitizePathSegment);
 
@@ -360,6 +369,7 @@ async function uploadFilesAndCreateFolderLink(accessToken, files, sector, linkOp
 
   const folderItemPath = folderPath.map(encodePathSegment).join("/");
   setStatus("Finalizando pasta e historico...", "");
+  accessToken = await getAccessToken();
   const folderItem = await graphRequest(accessToken, `/me/drive/root:/${folderItemPath}:`, {
     method: "GET"
   });
@@ -445,7 +455,7 @@ async function uploadLargeFile(accessToken, uploadPath, file, onProgress) {
   while (start < file.size) {
     const end = Math.min(start + uploadChunkSize, file.size) - 1;
     const chunk = file.slice(start, end + 1);
-    const response = await fetch(session.uploadUrl, {
+    const response = await fetchWithRetry(session.uploadUrl, {
       method: "PUT",
       headers: {
         "Content-Length": String(chunk.size),
@@ -616,7 +626,7 @@ async function ensureFolderPath(accessToken, folders) {
 }
 
 async function pathExists(accessToken, path) {
-  const response = await fetch(`${graphBaseUrl}/me/drive/root:/${path}`, {
+  const response = await fetchWithRetry(`${graphBaseUrl}/me/drive/root:/${path}`, {
     headers: {
       Authorization: `Bearer ${accessToken}`
     }
@@ -634,7 +644,7 @@ async function pathExists(accessToken, path) {
 }
 
 async function graphRequest(accessToken, endpoint, init) {
-  const response = await fetch(`${graphBaseUrl}${endpoint}`, {
+  const response = await fetchWithRetry(`${graphBaseUrl}${endpoint}`, {
     ...init,
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -656,6 +666,53 @@ async function graphError(response) {
     `A Microsoft retornou erro ${response.status} ao processar a solicitacao.`;
 
   return new Error(message);
+}
+
+async function fetchWithRetry(url, init = {}, attempts = 3) {
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      const response = await fetch(url, init);
+
+      if (!shouldRetryResponse(response) || attempt === attempts) {
+        return response;
+      }
+
+      await wait(getRetryDelay(response, attempt));
+    } catch (error) {
+      lastError = error;
+
+      if (attempt === attempts || !isTransientFetchError(error)) {
+        throw new Error("Falha de comunicacao com a Microsoft. Verifique a conexao e tente novamente.");
+      }
+
+      await wait(getRetryDelay(null, attempt));
+    }
+  }
+
+  throw lastError || new Error("Falha de comunicacao com a Microsoft. Tente novamente.");
+}
+
+function shouldRetryResponse(response) {
+  return [408, 429, 500, 502, 503, 504].includes(response.status);
+}
+
+function isTransientFetchError(error) {
+  return error instanceof TypeError || String(error?.message || "").toLowerCase().includes("failed to fetch");
+}
+
+function getRetryDelay(response, attempt) {
+  const retryAfter = Number(response?.headers?.get("Retry-After") || 0);
+  if (retryAfter > 0) {
+    return Math.min(retryAfter * 1000, 10_000);
+  }
+
+  return Math.min(800 * 2 ** (attempt - 1), 5_000);
+}
+
+function wait(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
 function renderLinks(links) {
@@ -838,7 +895,7 @@ async function getDriveItemByPath(accessToken, itemPath) {
 }
 
 async function deletePermission(accessToken, itemId, permissionId) {
-  const response = await fetch(`${graphBaseUrl}/me/drive/items/${itemId}/permissions/${permissionId}`, {
+  const response = await fetchWithRetry(`${graphBaseUrl}/me/drive/items/${itemId}/permissions/${permissionId}`, {
     method: "DELETE",
     headers: {
       Authorization: `Bearer ${accessToken}`
@@ -913,7 +970,7 @@ async function loadAndRenderHistory() {
 
 async function loadHistory(accessToken) {
   const historyPath = getHistoryPath().map(encodePathSegment).join("/");
-  const response = await fetch(`${graphBaseUrl}/me/drive/root:/${historyPath}:/content`, {
+  const response = await fetchWithRetry(`${graphBaseUrl}/me/drive/root:/${historyPath}:/content`, {
     headers: {
       Authorization: `Bearer ${accessToken}`
     }
@@ -1253,7 +1310,7 @@ async function finishRedirectLoginIfNeeded() {
 }
 
 async function requestToken(fields) {
-  const response = await fetch(`${authBaseUrl}/token`, {
+  const response = await fetchWithRetry(`${authBaseUrl}/token`, {
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded"
@@ -1378,6 +1435,7 @@ function clearTokenCache() {
   account = null;
   selectedFiles = [];
   elements.fileInput.value = "";
+  elements.folderInput.value = "";
   elements.linkList.innerHTML = "";
   elements.linkCount.textContent = "0";
   elements.emptyState.classList.remove("hidden");

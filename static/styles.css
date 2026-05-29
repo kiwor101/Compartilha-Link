@@ -243,6 +243,45 @@ body:has(#adminPanel) .loginPanel::before {
   background: #f4f7fa;
 }
 
+.filePickerActions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.filePickerButton {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  border: 1px solid #c4d5e2;
+  border-radius: 6px;
+  color: #0f3159;
+  background: #f9fcfe;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+}
+
+.filePickerButton:hover {
+  border-color: #8aa3b8;
+  background: #eef6fb;
+}
+
+.filePickerButton:focus-within {
+  border-color: var(--blue-strong);
+  box-shadow: 0 0 0 3px rgba(0, 116, 191, 0.14);
+}
+
+.filePickerButton input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
 .dropzone {
   position: relative;
   display: grid;
@@ -273,13 +312,6 @@ body:has(#adminPanel) .loginPanel::before {
   border-color: var(--blue-strong);
   background: #edf7fc;
   box-shadow: inset 0 0 0 1px rgba(0, 111, 186, 0.24);
-}
-
-.dropzone input {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  cursor: pointer;
 }
 
 .folderPicker {
@@ -636,5 +668,9 @@ body:has(#adminPanel) .loginPanel::before {
 
   .loginButton {
     max-width: none;
+  }
+
+  .filePickerActions {
+    grid-template-columns: 1fr;
   }
 }

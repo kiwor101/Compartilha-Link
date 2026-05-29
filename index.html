@@ -50,11 +50,21 @@
               <small>Depois desse prazo o link deixa de abrir para quem recebeu.</small>
             </label>
 
-            <label class="dropzone">
-              <strong>Selecionar ou arrastar arquivos</strong>
-              <span>Arraste arquivos ou uma pasta inteira para adicionar a lista</span>
-              <input id="fileInput" type="file" multiple />
-            </label>
+            <div class="filePickerActions">
+              <label class="filePickerButton">
+                Selecionar arquivos
+                <input id="fileInput" type="file" multiple />
+              </label>
+              <label class="filePickerButton">
+                Selecionar pasta
+                <input id="folderInput" type="file" webkitdirectory directory multiple />
+              </label>
+            </div>
+
+            <div class="dropzone">
+              <strong>Arrastar arquivos ou pasta</strong>
+              <span>Solte aqui para adicionar a lista</span>
+            </div>
 
             <div id="fileSummary" class="fileSummary hidden">
               <div>
