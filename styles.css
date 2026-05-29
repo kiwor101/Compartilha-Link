@@ -414,20 +414,6 @@ body:has(#adminPanel) .loginPanel::before {
   background: var(--success);
 }
 
-.openFolderButton {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 102px;
-  min-height: 38px;
-  border-radius: 6px;
-  padding: 0 12px;
-  color: #18415f;
-  background: #e8f1f8;
-  font-weight: 700;
-  text-decoration: none;
-}
-
 .renewButton {
   min-width: 86px;
   min-height: 36px;

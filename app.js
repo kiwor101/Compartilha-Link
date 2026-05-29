@@ -815,16 +815,6 @@ function renderLinks(links) {
       }, 1800);
     });
 
-    if (link.linkMode !== "files" && link.webUrl) {
-      const openFolderButton = document.createElement("a");
-      openFolderButton.className = "openFolderButton";
-      openFolderButton.href = link.webUrl;
-      openFolderButton.target = "_blank";
-      openFolderButton.rel = "noopener noreferrer";
-      openFolderButton.textContent = "Abrir pasta";
-      actions.append(openFolderButton);
-    }
-
     if (expired) {
       const renewSelect = document.createElement("select");
       renewSelect.className = "renewSelect";
