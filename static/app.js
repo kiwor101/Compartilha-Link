@@ -2,6 +2,7 @@ const graphBaseUrl = "https://graph.microsoft.com/v1.0";
 const authScopes = "openid profile offline_access User.Read Files.ReadWrite";
 const maxSimpleUploadSize = 250 * 1024 * 1024;
 const uploadChunkSize = 10 * 1024 * 1024;
+const networkRetryAttempts = 5;
 const historyFolderName = "_Compartilha Link Sistema";
 const historyFileName = "historico.json";
 const allowedEmailDomain = "@santacasaandradina.org";
@@ -326,7 +327,7 @@ async function uploadFilesAndCreateFolderLink(accessToken, files, sector, linkOp
 
   const uploadedFiles = [];
 
-  for (const file of files) {
+  for (const [index, file] of files.entries()) {
     accessToken = await getAccessToken();
     const relativePath = normalizeRelativePath(file.relativePath || file.webkitRelativePath || file.name);
     const uploadParts = relativePath.split("/").filter(Boolean).map(sanitizePathSegment);
@@ -336,34 +337,16 @@ async function uploadFilesAndCreateFolderLink(accessToken, files, sector, linkOp
     }
 
     const uploadPath = [...folderPath, ...uploadParts].map(encodePathSegment).join("/");
-    setStatus("Enviando arquivos...", "");
-    const uploadedItem =
-      file.size <= maxSimpleUploadSize
-        ? await uploadSmallFile(accessToken, uploadPath, file)
-        : await uploadLargeFile(accessToken, uploadPath, file, addUploadedBytes);
+    setStatus(`Enviando arquivo ${index + 1} de ${files.length}...`, "");
+    const uploadedItem = await uploadFileWithRetry(accessToken, uploadPath, file);
 
-    if (file.size <= maxSimpleUploadSize) {
-      addUploadedBytes(file.size);
-    }
-
-    setStatus("Criando link compartilhavel...", "");
-    const filePermission = await createFileSharingLink(accessToken, uploadedItem.id, expiresAt);
-    const fileWebUrl = extractSharingUrl(filePermission);
-
-    if (!fileWebUrl) {
-      throw new Error(
-        `Arquivo enviado, mas a Microsoft nao retornou o link do arquivo ${relativePath}. Detalhe tecnico: ${JSON.stringify(
-          filePermission
-        ).slice(0, 1200)}`
-      );
-    }
+    addUploadedBytes(file.size);
 
     uploadedFiles.push({
       fileName: uploadParts.join("/"),
       id: uploadedItem.id,
-      permissionId: filePermission.id || "",
       size: uploadedItem.size || file.size,
-      webUrl: fileWebUrl
+      webUrl: uploadedItem.webUrl || ""
     });
   }
 
@@ -376,13 +359,7 @@ async function uploadFilesAndCreateFolderLink(accessToken, files, sector, linkOp
 
   let webUrl = "";
   let linkMode = "files";
-  let fileLinks = uploadedFiles.map((file) => ({
-    fileName: file.fileName,
-    id: file.id,
-    permissionId: file.permissionId,
-    webUrl: file.webUrl,
-    size: file.size
-  }));
+  let fileLinks = [];
   let folderLinkError = "";
   let folderPermissionId = "";
 
@@ -400,6 +377,8 @@ async function uploadFilesAndCreateFolderLink(accessToken, files, sector, linkOp
   }
 
   if (!webUrl) {
+    setStatus("Criando links individuais como alternativa...", "");
+    fileLinks = await createFileLinks(accessToken, uploadedFiles, expiresAt);
     webUrl = fileLinks[0]?.webUrl || "";
   }
 
@@ -434,6 +413,34 @@ async function uploadSmallFile(accessToken, uploadPath, file) {
     },
     body: file
   });
+}
+
+async function uploadFileWithRetry(accessToken, uploadPath, file) {
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= networkRetryAttempts; attempt++) {
+    try {
+      return file.size <= maxSimpleUploadSize
+        ? await uploadSmallFile(accessToken, uploadPath, file)
+        : await uploadLargeFile(accessToken, uploadPath, file);
+    } catch (error) {
+      lastError = error;
+
+      if (attempt === networkRetryAttempts || !isRetriableUploadError(error)) {
+        break;
+      }
+
+      setStatus(`Conexao instavel. Tentando novamente (${attempt + 1}/${networkRetryAttempts})...`, "");
+      await wait(getRetryDelay(null, attempt));
+      accessToken = await getAccessToken();
+    }
+  }
+
+  throw new Error(
+    `Nao foi possivel enviar o arquivo ${uploadPath.split("/").pop()}. Verifique a conexao e tente novamente. Detalhe: ${
+      lastError?.message || "falha desconhecida"
+    }`
+  );
 }
 
 async function uploadLargeFile(accessToken, uploadPath, file, onProgress) {
@@ -665,10 +672,13 @@ async function graphError(response) {
     payload?.error?.message ||
     `A Microsoft retornou erro ${response.status} ao processar a solicitacao.`;
 
-  return new Error(message);
+  const error = new Error(message);
+  error.status = response.status;
+  error.code = payload?.error?.code || "";
+  return error;
 }
 
-async function fetchWithRetry(url, init = {}, attempts = 3) {
+async function fetchWithRetry(url, init = {}, attempts = networkRetryAttempts) {
   let lastError = null;
 
   for (let attempt = 1; attempt <= attempts; attempt++) {
@@ -700,6 +710,14 @@ function shouldRetryResponse(response) {
 
 function isTransientFetchError(error) {
   return error instanceof TypeError || String(error?.message || "").toLowerCase().includes("failed to fetch");
+}
+
+function isRetriableUploadError(error) {
+  return (
+    isTransientFetchError(error) ||
+    [408, 429, 500, 502, 503, 504].includes(Number(error?.status || 0)) ||
+    String(error?.message || "").toLowerCase().includes("falha de comunicacao")
+  );
 }
 
 function getRetryDelay(response, attempt) {
