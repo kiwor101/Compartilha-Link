@@ -124,7 +124,8 @@ async function scanOldFolders() {
     elements.deleteButton.disabled = false;
     setStatus(`${cleanupCandidates.length} pasta(s) encontrada(s). Confira a lista antes de apagar.`, "");
   } catch (error) {
-    setStatus(error.message || "Nao foi possivel buscar as pastas antigas.", "error");
+    handleAuthExpiredError(error);
+    setStatus(getFriendlyErrorMessage(error, "Nao foi possivel buscar as pastas antigas."), "error");
   } finally {
     elements.scanButton.disabled = false;
   }
@@ -164,7 +165,8 @@ async function deleteOldFolders() {
     renderCandidates([]);
     setStatus("Limpeza concluida e historico atualizado.", "done");
   } catch (error) {
-    setStatus(error.message || "Nao foi possivel concluir a limpeza.", "error");
+    handleAuthExpiredError(error);
+    setStatus(getFriendlyErrorMessage(error, "Nao foi possivel concluir a limpeza."), "error");
     elements.deleteButton.disabled = cleanupCandidates.length === 0;
   } finally {
     elements.scanButton.disabled = false;
@@ -231,12 +233,22 @@ async function getAccessToken() {
     throw new Error("Sua sessao expirou. Faca login novamente.");
   }
 
-  const refreshed = await requestToken({
-    grant_type: "refresh_token",
-    client_id: config.microsoftClientId,
-    scope: authScopes,
-    refresh_token: tokenCache.refreshToken
-  });
+  let refreshed;
+
+  try {
+    refreshed = await requestToken({
+      grant_type: "refresh_token",
+      client_id: config.microsoftClientId,
+      scope: authScopes,
+      refresh_token: tokenCache.refreshToken
+    });
+  } catch (error) {
+    if (isAuthExpiredError(error)) {
+      throw createSessionExpiredError();
+    }
+
+    throw error;
+  }
 
   saveTokenResponse(refreshed, tokenCache.account);
   return refreshed.access_token;
@@ -372,10 +384,48 @@ async function requestToken(fields) {
 
   if (!response.ok) {
     const payload = await response.json().catch(() => null);
-    throw new Error(payload?.error_description || "A Microsoft recusou a solicitacao de token.");
+    const error = new Error(payload?.error_description || "A Microsoft recusou a solicitacao de token.");
+    error.code = payload?.error || "";
+    error.description = payload?.error_description || "";
+    throw error;
   }
 
   return response.json();
+}
+
+function createSessionExpiredError() {
+  const error = new Error("Sua sessao Microsoft expirou. Clique em Login novamente para continuar.");
+  error.name = "SessionExpiredError";
+  return error;
+}
+
+function isAuthExpiredError(error) {
+  const text = `${error?.code || ""} ${error?.description || ""} ${error?.message || ""}`;
+  return (
+    error?.name === "SessionExpiredError" ||
+    text.includes("AADSTS700084") ||
+    text.includes("refresh token") ||
+    text.includes("invalid_grant")
+  );
+}
+
+function handleAuthExpiredError(error) {
+  if (!isAuthExpiredError(error)) {
+    return;
+  }
+
+  clearTokenCache();
+  sessionStorage.removeItem("pkce_state");
+  sessionStorage.removeItem("pkce_verifier");
+  renderSignedOut();
+}
+
+function getFriendlyErrorMessage(error, fallbackMessage) {
+  if (isAuthExpiredError(error)) {
+    return createSessionExpiredError().message;
+  }
+
+  return error?.message || fallbackMessage;
 }
 
 async function getCurrentUser(accessToken) {

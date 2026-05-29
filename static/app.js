@@ -230,7 +230,8 @@ async function uploadSelectedFiles() {
     setStatus("Links criados com sucesso.", "done");
   } catch (error) {
     hideUploadProgress();
-    setStatus(error.message || "Nao foi possivel concluir o envio.", "error");
+    handleAuthExpiredError(error);
+    setStatus(getFriendlyErrorMessage(error, "Nao foi possivel concluir o envio."), "error");
   } finally {
     elements.uploadButton.disabled = selectedFiles.length === 0;
   }
@@ -285,12 +286,22 @@ async function getAccessToken() {
     throw new Error("Sua sessao expirou. Faca login novamente.");
   }
 
-  const refreshed = await requestToken({
-    grant_type: "refresh_token",
-    client_id: config.microsoftClientId,
-    scope: authScopes,
-    refresh_token: tokenCache.refreshToken
-  });
+  let refreshed;
+
+  try {
+    refreshed = await requestToken({
+      grant_type: "refresh_token",
+      client_id: config.microsoftClientId,
+      scope: authScopes,
+      refresh_token: tokenCache.refreshToken
+    });
+  } catch (error) {
+    if (isAuthExpiredError(error)) {
+      throw createSessionExpiredError();
+    }
+
+    throw error;
+  }
 
   saveTokenResponse(refreshed, tokenCache.account);
   return refreshed.access_token;
@@ -737,7 +748,8 @@ async function renewLink(link, validityDays, button) {
     renderLinks(linkHistory);
     setStatus("Link renovado com sucesso.", "done");
   } catch (error) {
-    setStatus(error.message || "Nao foi possivel renovar o link.", "error");
+    handleAuthExpiredError(error);
+    setStatus(getFriendlyErrorMessage(error, "Nao foi possivel renovar o link."), "error");
     button.disabled = false;
     button.textContent = "Renovar";
   }
@@ -878,7 +890,8 @@ async function refreshSignedInUser() {
         accountInfo
       );
     }
-  } catch {
+  } catch (error) {
+    handleAuthExpiredError(error);
     elements.accountName.textContent = account?.username || "Usuario Microsoft";
   }
 }
@@ -888,9 +901,13 @@ async function loadAndRenderHistory() {
     const token = await getAccessToken();
     linkHistory = await loadHistory(token);
     renderLinks(linkHistory);
-  } catch {
+  } catch (error) {
+    handleAuthExpiredError(error);
     linkHistory = [];
     renderLinks([]);
+    if (isAuthExpiredError(error)) {
+      setStatus(getFriendlyErrorMessage(error, "Sua sessao expirou."), "error");
+    }
   }
 }
 
@@ -1246,10 +1263,50 @@ async function requestToken(fields) {
 
   if (!response.ok) {
     const payload = await response.json().catch(() => null);
-    throw new Error(payload?.error_description || "A Microsoft recusou a solicitacao de token.");
+    const error = new Error(payload?.error_description || "A Microsoft recusou a solicitacao de token.");
+    error.code = payload?.error || "";
+    error.description = payload?.error_description || "";
+    throw error;
   }
 
   return response.json();
+}
+
+function createSessionExpiredError() {
+  const error = new Error(
+    "Sua sessao Microsoft expirou. Clique em Login novamente e selecione os arquivos para reenviar."
+  );
+  error.name = "SessionExpiredError";
+  return error;
+}
+
+function isAuthExpiredError(error) {
+  const text = `${error?.code || ""} ${error?.description || ""} ${error?.message || ""}`;
+  return (
+    error?.name === "SessionExpiredError" ||
+    text.includes("AADSTS700084") ||
+    text.includes("refresh token") ||
+    text.includes("invalid_grant")
+  );
+}
+
+function handleAuthExpiredError(error) {
+  if (!isAuthExpiredError(error)) {
+    return;
+  }
+
+  clearTokenCache();
+  sessionStorage.removeItem("pkce_state");
+  sessionStorage.removeItem("pkce_verifier");
+  renderSignedOut();
+}
+
+function getFriendlyErrorMessage(error, fallbackMessage) {
+  if (isAuthExpiredError(error)) {
+    return createSessionExpiredError().message;
+  }
+
+  return error?.message || fallbackMessage;
 }
 
 async function getCurrentUser(accessToken) {
