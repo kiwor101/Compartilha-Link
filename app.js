@@ -351,8 +351,8 @@ async function uploadFilesAndCreateFolderLink(accessToken, files, sector, linkOp
         size: file.size,
         error: error?.message || "Falha no envio"
       });
-      addUploadedBytes(file.size);
-      continue;
+      setStatus(`Envio interrompido no arquivo ${uploadParts.join("/")}. Verifique a conexao e tente novamente.`, "error");
+      break;
     }
 
     addUploadedBytes(file.size);
